@@ -63,7 +63,7 @@ class CameraFragment : Fragment(),
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
 
-    private var currentImageRotation: Int = 90
+    private var currentImageRotation: Int = 0
 
     /** Blocking camera operations are performed using this executor */
     private lateinit var cameraExecutor: ExecutorService
@@ -279,17 +279,18 @@ class CameraFragment : Fragment(),
         }
 
         val imageRotation = image.imageInfo.rotationDegrees
-        currentImageRotation = imageRotation
+        // Rotar el bitmap a su orientación vertical real para que tanto YOLO como MediaPipe inspeccionen la misma imagen erguida
+        val rotatedBitmap = rotateBitmap(bitmapBuffer, imageRotation.toFloat())
 
         if (fragmentCameraBinding.overlay.isPoseEstimationEnabled && ::poseLandmarkerHelper.isInitialized) {
-            val rotatedBitmap = rotateBitmap(bitmapBuffer, imageRotation.toFloat())
             val frameTime = SystemClock.uptimeMillis()
             poseLandmarkerHelper.detectAsync(rotatedBitmap, frameTime)
         } else {
             fragmentCameraBinding.overlay.poseLandmarkerResult = null
         }
 
-        objectDetectorHelper.detect(bitmapBuffer, imageRotation)
+        // Se envía rotatedBitmap con rotación 0 porque la imagen ya fue rotada erguida
+        objectDetectorHelper.detect(rotatedBitmap, 0)
     }
 
     private fun rotateBitmap(source: Bitmap, angle: Float): Bitmap {
@@ -314,11 +315,12 @@ class CameraFragment : Fragment(),
             fragmentCameraBinding.bottomSheetLayout.inferenceTimeVal.text =
                 String.format("%d ms", inferenceTime)
 
+            // Pasar las dimensiones erguidas reales de la imagen procesada
             fragmentCameraBinding.overlay.setResults(
                 results,
                 imageHeight,
                 imageWidth,
-                currentImageRotation
+                0
             )
 
             fragmentCameraBinding.overlay.invalidate()
