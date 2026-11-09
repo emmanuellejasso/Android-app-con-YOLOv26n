@@ -52,6 +52,34 @@
                 android:textStyle="bold" />
         </LinearLayout>
 
+        <!-- Category Filter Card -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/card_bg"
+            android:padding="12dp"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:text="@string/label_categories"
+                android:textColor="@color/bottom_sheet_text_color"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatSpinner
+                android:id="@+id/spinner_category"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentRight="true"
+                android:minWidth="180dp"
+                android:spinnerMode="dropdown"
+                android:theme="@style/BottomSheetSpinnerItemStyle"
+                android:entries="@array/categories_spinner_titles" />
+        </RelativeLayout>
+
         <!-- Confidence threshold card -->
         <RelativeLayout
             android:layout_width="match_parent"
@@ -251,29 +279,32 @@
                 android:entries="@array/delegate_spinner_titles" />
         </RelativeLayout>
 
-        <!-- High Speed Inference Mode Switch Card -->
+        <!-- Model selection card -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/card_bg"
             android:padding="12dp"
-            android:layout_marginBottom="10dp">
+            android:layout_marginBottom="14dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
-                android:text="@string/label_high_speed_mode"
+                android:text="@string/label_models"
                 android:textColor="@color/bottom_sheet_text_color"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switch_speed_mode"
+            <androidx.appcompat.widget.AppCompatSpinner
+                android:id="@+id/spinner_model"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentRight="true"
-                android:layout_centerVertical="true" />
+                android:minWidth="180dp"
+                android:spinnerMode="dropdown"
+                android:theme="@style/BottomSheetSpinnerItemStyle"
+                android:entries="@array/models_spinner_titles" />
         </RelativeLayout>
 
         <!-- Pose Estimation Switch Card -->

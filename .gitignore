@@ -37,7 +37,3 @@ app/.cxx/
 
 # Log files
 *.log
-
-# PyTorch / ONNX temporary export models
-*.pt
-*.onnx

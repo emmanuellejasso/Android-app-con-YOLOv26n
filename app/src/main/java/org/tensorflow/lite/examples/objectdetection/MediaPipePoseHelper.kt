@@ -12,7 +12,7 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 
-class PoseLandmarkerHelper(
+class MediaPipePoseHelper(
     val context: Context,
     val poseLandmarkerListener: LandmarkerListener? = null
 ) {
@@ -26,7 +26,7 @@ class PoseLandmarkerHelper(
         try {
             val baseOptionsBuilder = BaseOptions.builder()
                 .setModelAssetPath("pose_landmarker.task")
-                .setDelegate(Delegate.GPU)
+                .setDelegate(Delegate.CPU)
 
             val optionsBuilder = PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(baseOptionsBuilder.build())
@@ -45,29 +45,7 @@ class PoseLandmarkerHelper(
 
             poseLandmarker = PoseLandmarker.createFromOptions(context, optionsBuilder.build())
         } catch (e: Exception) {
-            try {
-                val baseOptionsBuilder = BaseOptions.builder()
-                    .setModelAssetPath("pose_landmarker.task")
-                    .setDelegate(Delegate.CPU)
-
-                val optionsBuilder = PoseLandmarker.PoseLandmarkerOptions.builder()
-                    .setBaseOptions(baseOptionsBuilder.build())
-                    .setMinPoseDetectionConfidence(0.5f)
-                    .setMinPosePresenceConfidence(0.5f)
-                    .setMinTrackingConfidence(0.5f)
-                    .setNumPoses(3)
-                    .setRunningMode(RunningMode.LIVE_STREAM)
-                    .setResultListener { result: PoseLandmarkerResult, _: MPImage ->
-                        poseLandmarkerListener?.onResults(result)
-                    }
-                    .setErrorListener { error ->
-                        poseLandmarkerListener?.onError("Error: ${error.message}")
-                    }
-
-                poseLandmarker = PoseLandmarker.createFromOptions(context, optionsBuilder.build())
-            } catch (fallbackEx: Exception) {
-                poseLandmarkerListener?.onError("Error al inicializar MediaPipe Pose: ${fallbackEx.message}")
-            }
+            poseLandmarkerListener?.onError("Error al inicializar MediaPipe Pose: ${e.message}")
         }
     }
 

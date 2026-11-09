@@ -18,9 +18,9 @@ package org.tensorflow.lite.examples.objectdetection.fragments
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -40,15 +40,19 @@ import androidx.navigation.Navigation
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import org.tensorflow.lite.examples.objectdetection.MediaPipePoseHelper
 import org.tensorflow.lite.examples.objectdetection.ObjectDetectorHelper
-import org.tensorflow.lite.examples.objectdetection.PoseLandmarkerHelper
 import org.tensorflow.lite.examples.objectdetection.R
 import org.tensorflow.lite.examples.objectdetection.databinding.FragmentCameraBinding
 import org.tensorflow.lite.examples.objectdetection.detectors.ObjectDetection
+import java.util.LinkedList
+import java.util.Locale
 
 class CameraFragment : Fragment(),
     ObjectDetectorHelper.DetectorListener,
-    PoseLandmarkerHelper.LandmarkerListener {
+    MediaPipePoseHelper.LandmarkerListener {
+
+    private val TAG = "ObjectDetection"
 
     private var _fragmentCameraBinding: FragmentCameraBinding? = null
 
@@ -56,14 +60,14 @@ class CameraFragment : Fragment(),
         get() = _fragmentCameraBinding!!
 
     private lateinit var objectDetectorHelper: ObjectDetectorHelper
-    private lateinit var poseLandmarkerHelper: PoseLandmarkerHelper
+    private lateinit var mediaPipePoseHelper: MediaPipePoseHelper
     private lateinit var bitmapBuffer: Bitmap
     private var preview: Preview? = null
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
 
-    private var currentImageRotation: Int = 0
+    private var selectedCategoryIndex: Int = 0
 
     /** Blocking camera operations are performed using this executor */
     private lateinit var cameraExecutor: ExecutorService
@@ -77,8 +81,8 @@ class CameraFragment : Fragment(),
     }
 
     override fun onDestroyView() {
-        if (::poseLandmarkerHelper.isInitialized) {
-            poseLandmarkerHelper.clear()
+        if (::mediaPipePoseHelper.isInitialized) {
+            mediaPipePoseHelper.clear()
         }
         _fragmentCameraBinding = null
         super.onDestroyView()
@@ -86,9 +90,9 @@ class CameraFragment : Fragment(),
     }
 
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+      inflater: LayoutInflater,
+      container: ViewGroup?,
+      savedInstanceState: Bundle?
     ): View {
         _fragmentCameraBinding = FragmentCameraBinding.inflate(inflater, container, false)
         return fragmentCameraBinding.root
@@ -103,7 +107,7 @@ class CameraFragment : Fragment(),
             objectDetectorListener = this
         )
 
-        poseLandmarkerHelper = PoseLandmarkerHelper(
+        mediaPipePoseHelper = MediaPipePoseHelper(
             context = requireContext(),
             poseLandmarkerListener = this
         )
@@ -118,7 +122,21 @@ class CameraFragment : Fragment(),
     }
 
     private fun initBottomSheetControls() {
-        // Threshold controls
+        // Category Filter Selection
+        fragmentCameraBinding.bottomSheetLayout.spinnerCategory.setSelection(0, false)
+        fragmentCameraBinding.bottomSheetLayout.spinnerCategory.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
+                    selectedCategoryIndex = p2
+                    fragmentCameraBinding.overlay.clear()
+                }
+
+                override fun onNothingSelected(p0: AdapterView<*>?) {
+                    /* no op */
+                }
+            }
+
+        // When clicked, lower detection score threshold floor
         fragmentCameraBinding.bottomSheetLayout.thresholdMinus.setOnClickListener {
             if (objectDetectorHelper.threshold >= 0.1) {
                 objectDetectorHelper.threshold -= 0.1f
@@ -126,6 +144,7 @@ class CameraFragment : Fragment(),
             }
         }
 
+        // When clicked, raise detection score threshold floor
         fragmentCameraBinding.bottomSheetLayout.thresholdPlus.setOnClickListener {
             if (objectDetectorHelper.threshold <= 0.8) {
                 objectDetectorHelper.threshold += 0.1f
@@ -133,7 +152,7 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // Max results controls
+        // When clicked, reduce the number of objects that can be detected at a time
         fragmentCameraBinding.bottomSheetLayout.maxResultsMinus.setOnClickListener {
             if (objectDetectorHelper.maxResults > 1) {
                 objectDetectorHelper.maxResults--
@@ -141,6 +160,7 @@ class CameraFragment : Fragment(),
             }
         }
 
+        // When clicked, increase the number of objects that can be detected at a time
         fragmentCameraBinding.bottomSheetLayout.maxResultsPlus.setOnClickListener {
             if (objectDetectorHelper.maxResults < 5) {
                 objectDetectorHelper.maxResults++
@@ -148,7 +168,7 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // Threads controls
+        // When clicked, decrease the number of threads used for detection
         fragmentCameraBinding.bottomSheetLayout.threadsMinus.setOnClickListener {
             if (objectDetectorHelper.numThreads > 1) {
                 objectDetectorHelper.numThreads--
@@ -156,6 +176,7 @@ class CameraFragment : Fragment(),
             }
         }
 
+        // When clicked, increase the number of threads used for detection
         fragmentCameraBinding.bottomSheetLayout.threadsPlus.setOnClickListener {
             if (objectDetectorHelper.numThreads < 4) {
                 objectDetectorHelper.numThreads++
@@ -163,7 +184,8 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // Delegate spinner
+        // When clicked, change the underlying hardware used for inference. Current options are CPU
+        // GPU, and NNAPI
         fragmentCameraBinding.bottomSheetLayout.spinnerDelegate.setSelection(0, false)
         fragmentCameraBinding.bottomSheetLayout.spinnerDelegate.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
@@ -177,20 +199,21 @@ class CameraFragment : Fragment(),
                 }
             }
 
-        // Speed mode switch: OFF = YOLOv26n (Default, Precision), ON = MobileNet V1 (Speed)
-        fragmentCameraBinding.bottomSheetLayout.switchSpeedMode.isChecked =
-            objectDetectorHelper.currentModel == ObjectDetectorHelper.MODEL_MOBILENETV1
+        // When clicked, change the underlying model used for object detection
+        fragmentCameraBinding.bottomSheetLayout.spinnerModel.setSelection(0, false)
+        fragmentCameraBinding.bottomSheetLayout.spinnerModel.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
+                    objectDetectorHelper.currentModel = p2
+                    updateControlsUi()
+                }
 
-        fragmentCameraBinding.bottomSheetLayout.switchSpeedMode.setOnCheckedChangeListener { _, isChecked ->
-            objectDetectorHelper.currentModel = if (isChecked) {
-                ObjectDetectorHelper.MODEL_MOBILENETV1
-            } else {
-                ObjectDetectorHelper.MODEL_YOLO26
+                override fun onNothingSelected(p0: AdapterView<*>?) {
+                    /* no op */
+                }
             }
-            updateControlsUi()
-        }
 
-        // Pose estimation switch
+        // Pose Estimation switch
         fragmentCameraBinding.bottomSheetLayout.switchPoseEstimation.isChecked =
             fragmentCameraBinding.overlay.isPoseEstimationEnabled
 
@@ -248,11 +271,12 @@ class CameraFragment : Fragment(),
                     it.setAnalyzer(cameraExecutor) { image ->
                         if (!::bitmapBuffer.isInitialized) {
                             bitmapBuffer = Bitmap.createBitmap(
-                                image.width,
-                                image.height,
-                                Bitmap.Config.ARGB_8888
+                              image.width,
+                              image.height,
+                              Bitmap.Config.ARGB_8888
                             )
                         }
+
                         detectObjects(image)
                     }
                 }
@@ -260,16 +284,10 @@ class CameraFragment : Fragment(),
         cameraProvider.unbindAll()
 
         try {
-            camera = cameraProvider.bindToLifecycle(
-                this,
-                cameraSelector,
-                preview,
-                imageAnalyzer
-            )
-
+            camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalyzer)
             preview?.setSurfaceProvider(fragmentCameraBinding.viewFinder.surfaceProvider)
         } catch (exc: Exception) {
-            /* ignore */
+            Log.e(TAG, "Use case binding failed", exc)
         }
     }
 
@@ -278,26 +296,15 @@ class CameraFragment : Fragment(),
             bitmapBuffer.copyPixelsFromBuffer(image.planes[0].buffer)
         }
 
-        val imageRotation = image.imageInfo.rotationDegrees
-        // Rotar el bitmap a su orientación vertical real para que tanto YOLO como MediaPipe inspeccionen la misma imagen erguida
-        val rotatedBitmap = rotateBitmap(bitmapBuffer, imageRotation.toFloat())
-
-        if (fragmentCameraBinding.overlay.isPoseEstimationEnabled && ::poseLandmarkerHelper.isInitialized) {
+        if (fragmentCameraBinding.overlay.isPoseEstimationEnabled && ::mediaPipePoseHelper.isInitialized) {
             val frameTime = SystemClock.uptimeMillis()
-            poseLandmarkerHelper.detectAsync(rotatedBitmap, frameTime)
+            mediaPipePoseHelper.detectAsync(bitmapBuffer, frameTime)
         } else {
             fragmentCameraBinding.overlay.poseLandmarkerResult = null
         }
 
-        // Se envía rotatedBitmap con rotación 0 porque la imagen ya fue rotada erguida
-        objectDetectorHelper.detect(rotatedBitmap, 0)
-    }
-
-    private fun rotateBitmap(source: Bitmap, angle: Float): Bitmap {
-        if (angle == 0f) return source
-        val matrix = Matrix()
-        matrix.postRotate(angle)
-        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+        val imageRotation = image.imageInfo.rotationDegrees
+        objectDetectorHelper.detect(bitmapBuffer, imageRotation)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -313,14 +320,21 @@ class CameraFragment : Fragment(),
     ) {
         activity?.runOnUiThread {
             fragmentCameraBinding.bottomSheetLayout.inferenceTimeVal.text =
-                String.format("%d ms", inferenceTime)
+                            String.format("%d ms", inferenceTime)
 
-            // Pasar las dimensiones erguidas reales de la imagen procesada
+            val allowedLabels = CATEGORY_MAP[selectedCategoryIndex]
+            val filteredResults = if (allowedLabels == null) {
+                results
+            } else {
+                results.filter { detection ->
+                    allowedLabels.contains(detection.category.label.lowercase(Locale.getDefault()))
+                }
+            }
+
             fragmentCameraBinding.overlay.setResults(
-                results,
+                filteredResults ?: LinkedList<ObjectDetection>(),
                 imageHeight,
-                imageWidth,
-                0
+                imageWidth
             )
 
             fragmentCameraBinding.overlay.invalidate()
@@ -338,5 +352,20 @@ class CameraFragment : Fragment(),
         activity?.runOnUiThread {
             Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    companion object {
+        val CATEGORY_MAP = mapOf(
+            0 to null, // Todas las Clases
+            1 to setOf("persona", "person"),
+            2 to setOf("bicicleta", "coche", "motocicleta", "avión", "autobús", "tren", "camión", "barco", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat"),
+            3 to setOf("pájaro", "gato", "perro", "caballo", "oveja", "vaca", "elefante", "oso", "cebra", "jirafa", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe"),
+            4 to setOf("mochila", "paraguas", "bolso", "corbata", "maleta", "backpack", "umbrella", "handbag", "tie", "suitcase"),
+            5 to setOf("frisbee", "esquís", "snowboard", "balón", "cometa", "bate de béisbol", "guante de béisbol", "monopatín", "tabla de surf", "raqueta de tenis", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "skis"),
+            6 to setOf("botella", "copa de vino", "taza", "tenedor", "cuchillo", "cuchara", "tazón", "plátano", "manzana", "sándwich", "naranja", "brócoli", "zanahoria", "perrito caliente", "pizza", "dónut", "pastel", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "donut", "cake"),
+            7 to setOf("banco", "silla", "sofá", "planta en maceta", "cama", "mesa de comedor", "inodoro", "bench", "chair", "couch", "potted plant", "bed", "dining table", "toilet"),
+            8 to setOf("televisión", "portátil", "ratón", "mando a distancia", "teclado", "teléfono móvil", "microondas", "horno", "tostadora", "fregadero", "frigorífico", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator"),
+            9 to setOf("semáforo", "boca de incendio", "señal de stop", "parquímetro", "libro", "reloj", "florero", "tijeras", "oso de peluche", "secador de pelo", "cepillo de dientes", "traffic light", "fire hydrant", "stop sign", "parking meter", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush")
+        )
     }
 }
