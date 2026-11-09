@@ -52,6 +52,9 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var waistLinePaint = Paint()
 
     private var scaleFactor: Float = 1f
+    private var offsetX: Float = 0f
+    private var offsetY: Float = 0f
+
     private var bounds = Rect()
     private var subBounds = Rect()
 
@@ -164,25 +167,19 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         for (personDet in personDetections) {
             val boundingBox = personDet.originalDetection.boundingBox
 
-            val top = boundingBox.top * scaleFactor
-            val bottom = boundingBox.bottom * scaleFactor
-            val left = boundingBox.left * scaleFactor
-            val right = boundingBox.right * scaleFactor
+            val top = boundingBox.top * scaleFactor + offsetY
+            val bottom = boundingBox.bottom * scaleFactor + offsetY
+            val left = boundingBox.left * scaleFactor + offsetX
+            val right = boundingBox.right * scaleFactor + offsetX
 
             val drawableRect = RectF(left, top, right, bottom)
-            val widthPx = right - left
-            val heightPx = bottom - top
 
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxFillPaint)
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxPaint)
 
-            // Si la estimación de pose está habilitada, renderizar MediaPipe Pose Landmarks
-            if (isPoseEstimationEnabled) {
-                if (poseLandmarkerResult != null && poseLandmarkerResult!!.landmarks().isNotEmpty()) {
-                    drawMediaPipeLandmarks(canvas)
-                } else {
-                    drawPoseSkeletonFallback(canvas, left, top, widthPx, heightPx)
-                }
+            // Renderizar MediaPipe Pose Landmarks SOLAMENTE si la estimación está activa y los datos reales fueron detectados
+            if (isPoseEstimationEnabled && poseLandmarkerResult != null && poseLandmarkerResult!!.landmarks().isNotEmpty()) {
+                drawMediaPipeLandmarks(canvas)
             }
 
             val confidencePct = (personDet.originalDetection.category.confidence * 100).toInt()
@@ -241,10 +238,10 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
                     val startLm = poseLandmarks[startIdx]
                     val endLm = poseLandmarks[endIdx]
 
-                    val startX = startLm.x() * rotatedWidth * scaleFactor
-                    val startY = startLm.y() * rotatedHeight * scaleFactor
-                    val endX = endLm.x() * rotatedWidth * scaleFactor
-                    val endY = endLm.y() * rotatedHeight * scaleFactor
+                    val startX = startLm.x() * rotatedWidth * scaleFactor + offsetX
+                    val startY = startLm.y() * rotatedHeight * scaleFactor + offsetY
+                    val endX = endLm.x() * rotatedWidth * scaleFactor + offsetX
+                    val endY = endLm.y() * rotatedHeight * scaleFactor + offsetY
 
                     val paintToUse = if (startIdx == 23 && endIdx == 24) waistLinePaint else skeletonPaint
                     canvas.drawLine(startX, startY, endX, endY, paintToUse)
@@ -253,89 +250,29 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
             // Dibujar puntos clave (Landmarks) para cabeza, hombros, codos, manos, cadera y piernas
             for ((idx, lm) in poseLandmarks.withIndex()) {
-                val x = lm.x() * rotatedWidth * scaleFactor
-                val y = lm.y() * rotatedHeight * scaleFactor
+                val x = lm.x() * rotatedWidth * scaleFactor + offsetX
+                val y = lm.y() * rotatedHeight * scaleFactor + offsetY
 
                 val paint = when (idx) {
                     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 -> headJointPaint // Cabeza / Rostro (Cian Neón)
-                    11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 -> armJointPaint // Hombros, Codos, Muñecas y Manos (Amarillo/Verde)
+                    11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 -> armJointPaint // Hombros, Codos, Muñecas y Manos (Amarillo)
                     else -> jointPaint // Caderas, Rodillas, Tobillos (Magenta Neón)
                 }
-                val radius = if (idx in 15..22) 13f else 10f // Manos y dedos resaltados
+                val radius = if (idx in 15..22) 13f else 10f
 
                 canvas.drawCircle(x, y, radius, paint)
             }
         }
     }
 
-    private fun drawPoseSkeletonFallback(
-        canvas: Canvas,
-        left: Float,
-        top: Float,
-        widthPx: Float,
-        heightPx: Float
-    ) {
-        val centerX = left + widthPx / 2f
-
-        val headY = top + heightPx * 0.08f
-        val neckY = top + heightPx * 0.18f
-        val shoulderLeftX = left + widthPx * 0.25f
-        val shoulderRightX = left + widthPx * 0.75f
-
-        val waistY = top + heightPx * 0.38f // Línea de Cintura (38%)
-        val hipLeftX = left + widthPx * 0.35f
-        val hipRightX = left + widthPx * 0.65f
-
-        val kneeY = top + heightPx * 0.70f
-        val ankleY = top + heightPx * 0.92f
-
-        canvas.drawCircle(centerX, headY, 12f, headJointPaint)
-
-        canvas.drawLine(centerX, headY + 12f, centerX, neckY, skeletonPaint)
-        canvas.drawLine(centerX, neckY, centerX, waistY, skeletonPaint)
-
-        canvas.drawLine(shoulderLeftX, neckY, shoulderRightX, neckY, skeletonPaint)
-        canvas.drawCircle(shoulderLeftX, neckY, 10f, armJointPaint)
-        canvas.drawCircle(shoulderRightX, neckY, 10f, armJointPaint)
-
-        // Codos y Manos
-        val elbowLeftX = left + widthPx * 0.18f
-        val elbowRightX = left + widthPx * 0.82f
-        val handLeftX = left + widthPx * 0.12f
-        val handRightX = left + widthPx * 0.88f
-        val armY = top + heightPx * 0.42f
-
-        canvas.drawLine(shoulderLeftX, neckY, elbowLeftX, armY, skeletonPaint)
-        canvas.drawLine(shoulderRightX, neckY, elbowRightX, armY, skeletonPaint)
-        canvas.drawCircle(elbowLeftX, armY, 10f, armJointPaint)
-        canvas.drawCircle(elbowRightX, armY, 10f, armJointPaint)
-
-        canvas.drawLine(elbowLeftX, armY, handLeftX, armY + 20f, skeletonPaint)
-        canvas.drawLine(elbowRightX, armY, handRightX, armY + 20f, skeletonPaint)
-        canvas.drawCircle(handLeftX, armY + 20f, 12f, armJointPaint)
-        canvas.drawCircle(handRightX, armY + 20f, 12f, armJointPaint)
-
-        canvas.drawLine(left, waistY, left + widthPx, waistY, waistLinePaint)
-        canvas.drawCircle(hipLeftX, waistY, 10f, jointPaint)
-        canvas.drawCircle(hipRightX, waistY, 10f, jointPaint)
-
-        canvas.drawLine(hipLeftX, waistY, left + widthPx * 0.35f, kneeY, skeletonPaint)
-        canvas.drawLine(hipRightX, waistY, left + widthPx * 0.65f, kneeY, skeletonPaint)
-        canvas.drawCircle(left + widthPx * 0.35f, kneeY, 10f, jointPaint)
-        canvas.drawCircle(left + widthPx * 0.65f, kneeY, 10f, jointPaint)
-
-        canvas.drawLine(left + widthPx * 0.35f, kneeY, left + widthPx * 0.35f, ankleY, skeletonPaint)
-        canvas.drawLine(left + widthPx * 0.65f, kneeY, left + widthPx * 0.65f, ankleY, skeletonPaint)
-    }
-
     private fun drawStandardDetections(canvas: Canvas) {
         for (result in results) {
             val boundingBox = result.boundingBox
 
-            val top = boundingBox.top * scaleFactor
-            val bottom = boundingBox.bottom * scaleFactor
-            val left = boundingBox.left * scaleFactor
-            val right = boundingBox.right * scaleFactor
+            val top = boundingBox.top * scaleFactor + offsetY
+            val bottom = boundingBox.bottom * scaleFactor + offsetY
+            val left = boundingBox.left * scaleFactor + offsetX
+            val right = boundingBox.right * scaleFactor + offsetX
 
             val drawableRect = RectF(left, top, right, bottom)
 
@@ -397,9 +334,18 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             rotatedHeight = imageHeight
         }
 
-        personDetections = personOnlyResults
-            .map { PersonDistanceEstimator.processDetection(it, rotatedHeight) }
-
         scaleFactor = max(width * 1f / rotatedWidth, height * 1f / rotatedHeight)
+        offsetX = (width - rotatedWidth * scaleFactor) / 2f
+        offsetY = (height - rotatedHeight * scaleFactor) / 2f
+
+        personDetections = personOnlyResults
+            .map {
+                PersonDistanceEstimator.processDetection(
+                    it,
+                    rotatedHeight,
+                    rotatedWidth,
+                    poseLandmarkerResult
+                )
+            }
     }
 }
