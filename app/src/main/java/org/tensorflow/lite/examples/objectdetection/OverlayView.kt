@@ -165,12 +165,13 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         boxFillPaint.color = Color.parseColor("#2500E5FF")
 
         for (personDet in personDetections) {
-            val boundingBox = personDet.originalDetection.boundingBox
+            val normBbox = personDet.originalDetection.boundingBox
 
-            val top = boundingBox.top * scaleFactor + offsetY
-            val bottom = boundingBox.bottom * scaleFactor + offsetY
-            val left = boundingBox.left * scaleFactor + offsetX
-            val right = boundingBox.right * scaleFactor + offsetX
+            // Proyección exacta de coordenadas normalizadas (0.0 .. 1.0) a píxeles de pantalla
+            val left = normBbox.left * rotatedWidth * scaleFactor + offsetX
+            val top = normBbox.top * rotatedHeight * scaleFactor + offsetY
+            val right = normBbox.right * rotatedWidth * scaleFactor + offsetX
+            val bottom = normBbox.bottom * rotatedHeight * scaleFactor + offsetY
 
             val drawableRect = RectF(left, top, right, bottom)
 
@@ -267,12 +268,12 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
     private fun drawStandardDetections(canvas: Canvas) {
         for (result in results) {
-            val boundingBox = result.boundingBox
+            val normBbox = result.boundingBox
 
-            val top = boundingBox.top * scaleFactor + offsetY
-            val bottom = boundingBox.bottom * scaleFactor + offsetY
-            val left = boundingBox.left * scaleFactor + offsetX
-            val right = boundingBox.right * scaleFactor + offsetX
+            val top = normBbox.top * rotatedHeight * scaleFactor + offsetY
+            val bottom = normBbox.bottom * rotatedHeight * scaleFactor + offsetY
+            val left = normBbox.left * rotatedWidth * scaleFactor + offsetX
+            val right = normBbox.right * rotatedWidth * scaleFactor + offsetX
 
             val drawableRect = RectF(left, top, right, bottom)
 
@@ -342,8 +343,6 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             .map {
                 PersonDistanceEstimator.processDetection(
                     it,
-                    rotatedHeight,
-                    rotatedWidth,
                     poseLandmarkerResult
                 )
             }

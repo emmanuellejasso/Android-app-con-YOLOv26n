@@ -53,33 +53,19 @@ class YoloDetector(
 
         val detections = ArrayList<ObjectDetection>()
 
-        var imgH: Int
-        var imgW: Int
-        if (imageRotation == 90 || imageRotation == 270) {
-            imgH = ppImage.height
-            imgW = imgH * 3 / 4
-        } else {
-            imgW = ppImage.width
-            imgH = imgW * 3 / 4
-        }
-
         for (result: DetectedObject in results) {
             val category = Category(
                 result.label,
                 result.confidence
             )
+            // Mantener coordenadas normalizadas (0.0f .. 1.0f) para alineación perfecta con el Canvas
             val yoloBox = result.boundingBox
 
-            val left = yoloBox.left * imgW
-            val top = yoloBox.top * imgH
-            val right = yoloBox.right * imgW
-            val bottom = yoloBox.bottom * imgH
-
             val bbox = RectF(
-                left,
-                top,
-                right,
-                bottom
+                yoloBox.left,
+                yoloBox.top,
+                yoloBox.right,
+                yoloBox.bottom
             )
             val detection = ObjectDetection(
                 bbox,
