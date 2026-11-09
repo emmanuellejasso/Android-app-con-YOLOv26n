@@ -35,14 +35,15 @@ import kotlin.math.max
 class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
     private var results: List<ObjectDetection> = LinkedList<ObjectDetection>()
-    private var boxPaint = Paint()
-    private var boxFillPaint = Paint()
-    private var textBackgroundPaint = Paint()
-    private var textPaint = Paint()
 
     // Estimación de pose con MediaPipe
     var isPoseEstimationEnabled: Boolean = false
     var poseLandmarkerResult: PoseLandmarkerResult? = null
+
+    private var boxPaint = Paint()
+    private var boxFillPaint = Paint()
+    private var textBackgroundPaint = Paint()
+    private var textPaint = Paint()
 
     private var skeletonPaint = Paint()
     private var jointPaint = Paint()
@@ -52,6 +53,10 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
     private var scaleFactor: Float = 1f
     private var bounds = Rect()
+
+    private var currentImageHeight: Int = 1
+    private var currentImageWidth: Int = 1
+    private var currentImageRotation: Int = 90
 
     companion object {
         // Conexiones de los 33 puntos clave (landmarks) de MediaPipe Pose
@@ -114,7 +119,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         skeletonPaint.style = Paint.Style.STROKE
         skeletonPaint.isAntiAlias = true
 
-        // Puntos Clave generales
+        // Puntos Clave generales (Caderas, Rodillas, Tobillos)
         jointPaint.color = Color.parseColor("#FF0055") // Magenta neón
         jointPaint.style = Paint.Style.FILL
         jointPaint.isAntiAlias = true
@@ -154,7 +159,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxFillPaint)
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxPaint)
 
-            // Si la estimación de pose está habilitada, mapear los puntos clave de MediaPipe exactamente DENTRO de drawableRect
+            // Si la estimación de pose está habilitada, mapear los puntos clave de MediaPipe exactamente DENTRO de drawableRect en posición vertical
             if (isPoseEstimationEnabled) {
                 drawPoseInsideRect(canvas, drawableRect)
             }
@@ -206,7 +211,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         val boxHeight = rect.height()
 
         for (poseLandmarks in landmarksList) {
-            // Dibujar conexiones entre puntos clave proyectados exactamente sobre la caja azul
+            // Dibujar conexiones entre puntos clave proyectados erguidos en posición vertical (Portrait)
             for (connection in POSE_CONNECTIONS) {
                 val startIdx = connection.first
                 val endIdx = connection.second
@@ -215,10 +220,16 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
                     val startLm = poseLandmarks[startIdx]
                     val endLm = poseLandmarks[endIdx]
 
-                    val startX = boxLeft + startLm.x() * boxWidth
-                    val startY = boxTop + startLm.y() * boxHeight
-                    val endX = boxLeft + endLm.x() * boxWidth
-                    val endY = boxTop + endLm.y() * boxHeight
+                    val (startX, startY) = mapNormalizedLandmark(
+                        startLm.x(), startLm.y(),
+                        boxLeft, boxTop, boxWidth, boxHeight,
+                        currentImageRotation
+                    )
+                    val (endX, endY) = mapNormalizedLandmark(
+                        endLm.x(), endLm.y(),
+                        boxLeft, boxTop, boxWidth, boxHeight,
+                        currentImageRotation
+                    )
 
                     val paintToUse = if (startIdx == 23 && endIdx == 24) waistLinePaint else skeletonPaint
                     canvas.drawLine(startX, startY, endX, endY, paintToUse)
@@ -227,8 +238,11 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
             // Dibujar puntos clave (Landmarks) para cabeza, hombros, codos, manos, cadera y piernas
             for ((idx, lm) in poseLandmarks.withIndex()) {
-                val x = boxLeft + lm.x() * boxWidth
-                val y = boxTop + lm.y() * boxHeight
+                val (x, y) = mapNormalizedLandmark(
+                    lm.x(), lm.y(),
+                    boxLeft, boxTop, boxWidth, boxHeight,
+                    currentImageRotation
+                )
 
                 val paint = when (idx) {
                     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 -> headJointPaint // Cabeza / Rostro (Cian Neón)
@@ -242,12 +256,37 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         }
     }
 
+    private fun mapNormalizedLandmark(
+        normX: Float,
+        normY: Float,
+        boxLeft: Float,
+        boxTop: Float,
+        boxWidth: Float,
+        boxHeight: Float,
+        rotationDegrees: Int
+    ): Pair<Float, Float> {
+        // Rotación de 90° vertical para modo Portrait del sensor de la cámara:
+        // x_portrait = 1.0 - normY
+        // y_portrait = normX
+        val (mappedX, mappedY) = when (rotationDegrees) {
+            270 -> Pair(normY, 1.0f - normX)
+            180 -> Pair(1.0f - normX, 1.0f - normY)
+            0 -> Pair(normX, normY)
+            else -> Pair(1.0f - normY, normX) // 90° Estándar para uso en Portrait
+        }
+        return Pair(boxLeft + mappedX * boxWidth, boxTop + mappedY * boxHeight)
+    }
+
     fun setResults(
         detectionResults: List<ObjectDetection>,
         imageHeight: Int,
-        imageWidth: Int
+        imageWidth: Int,
+        imageRotation: Int = 90
     ) {
         results = detectionResults
+        currentImageHeight = imageHeight
+        currentImageWidth = imageWidth
+        currentImageRotation = if (imageRotation == 0) 90 else imageRotation
 
         scaleFactor = max(width * 1f / imageWidth, height * 1f / imageHeight)
     }
