@@ -24,7 +24,6 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
 import android.widget.Toast
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.Camera
@@ -45,8 +44,6 @@ import org.tensorflow.lite.examples.objectdetection.ObjectDetectorHelper
 import org.tensorflow.lite.examples.objectdetection.R
 import org.tensorflow.lite.examples.objectdetection.databinding.FragmentCameraBinding
 import org.tensorflow.lite.examples.objectdetection.detectors.ObjectDetection
-import java.util.LinkedList
-import java.util.Locale
 
 class CameraFragment : Fragment(),
     ObjectDetectorHelper.DetectorListener,
@@ -66,8 +63,6 @@ class CameraFragment : Fragment(),
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
-
-    private var selectedCategoryIndex: Int = 0
 
     /** Blocking camera operations are performed using this executor */
     private lateinit var cameraExecutor: ExecutorService
@@ -122,21 +117,7 @@ class CameraFragment : Fragment(),
     }
 
     private fun initBottomSheetControls() {
-        // Category Filter Selection
-        fragmentCameraBinding.bottomSheetLayout.spinnerCategory.setSelection(0, false)
-        fragmentCameraBinding.bottomSheetLayout.spinnerCategory.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
-                    selectedCategoryIndex = p2
-                    fragmentCameraBinding.overlay.clear()
-                }
-
-                override fun onNothingSelected(p0: AdapterView<*>?) {
-                    /* no op */
-                }
-            }
-
-        // When clicked, lower detection score threshold floor
+        // Threshold controls
         fragmentCameraBinding.bottomSheetLayout.thresholdMinus.setOnClickListener {
             if (objectDetectorHelper.threshold >= 0.1) {
                 objectDetectorHelper.threshold -= 0.1f
@@ -144,7 +125,6 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // When clicked, raise detection score threshold floor
         fragmentCameraBinding.bottomSheetLayout.thresholdPlus.setOnClickListener {
             if (objectDetectorHelper.threshold <= 0.8) {
                 objectDetectorHelper.threshold += 0.1f
@@ -152,7 +132,7 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // When clicked, reduce the number of objects that can be detected at a time
+        // Max results controls
         fragmentCameraBinding.bottomSheetLayout.maxResultsMinus.setOnClickListener {
             if (objectDetectorHelper.maxResults > 1) {
                 objectDetectorHelper.maxResults--
@@ -160,7 +140,6 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // When clicked, increase the number of objects that can be detected at a time
         fragmentCameraBinding.bottomSheetLayout.maxResultsPlus.setOnClickListener {
             if (objectDetectorHelper.maxResults < 5) {
                 objectDetectorHelper.maxResults++
@@ -168,7 +147,7 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // When clicked, decrease the number of threads used for detection
+        // Threads controls
         fragmentCameraBinding.bottomSheetLayout.threadsMinus.setOnClickListener {
             if (objectDetectorHelper.numThreads > 1) {
                 objectDetectorHelper.numThreads--
@@ -176,7 +155,6 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // When clicked, increase the number of threads used for detection
         fragmentCameraBinding.bottomSheetLayout.threadsPlus.setOnClickListener {
             if (objectDetectorHelper.numThreads < 4) {
                 objectDetectorHelper.numThreads++
@@ -184,34 +162,18 @@ class CameraFragment : Fragment(),
             }
         }
 
-        // When clicked, change the underlying hardware used for inference. Current options are CPU
-        // GPU, and NNAPI
-        fragmentCameraBinding.bottomSheetLayout.spinnerDelegate.setSelection(0, false)
-        fragmentCameraBinding.bottomSheetLayout.spinnerDelegate.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
-                    objectDetectorHelper.currentDelegate = p2
-                    updateControlsUi()
-                }
+        // Speed mode switch: OFF = YOLOv26n (Default, Precision), ON = MobileNet V1 (Speed)
+        fragmentCameraBinding.bottomSheetLayout.switchSpeedMode.isChecked =
+            objectDetectorHelper.currentModel == ObjectDetectorHelper.MODEL_MOBILENETV1
 
-                override fun onNothingSelected(p0: AdapterView<*>?) {
-                    /* no op */
-                }
+        fragmentCameraBinding.bottomSheetLayout.switchSpeedMode.setOnCheckedChangeListener { _, isChecked ->
+            objectDetectorHelper.currentModel = if (isChecked) {
+                ObjectDetectorHelper.MODEL_MOBILENETV1
+            } else {
+                ObjectDetectorHelper.MODEL_YOLO26
             }
-
-        // When clicked, change the underlying model used for object detection
-        fragmentCameraBinding.bottomSheetLayout.spinnerModel.setSelection(0, false)
-        fragmentCameraBinding.bottomSheetLayout.spinnerModel.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
-                    objectDetectorHelper.currentModel = p2
-                    updateControlsUi()
-                }
-
-                override fun onNothingSelected(p0: AdapterView<*>?) {
-                    /* no op */
-                }
-            }
+            updateControlsUi()
+        }
 
         // Pose Estimation switch
         fragmentCameraBinding.bottomSheetLayout.switchPoseEstimation.isChecked =
@@ -320,19 +282,10 @@ class CameraFragment : Fragment(),
     ) {
         activity?.runOnUiThread {
             fragmentCameraBinding.bottomSheetLayout.inferenceTimeVal.text =
-                            String.format("%d ms", inferenceTime)
-
-            val allowedLabels = CATEGORY_MAP[selectedCategoryIndex]
-            val filteredResults = if (allowedLabels == null) {
-                results
-            } else {
-                results.filter { detection ->
-                    allowedLabels.contains(detection.category.label.lowercase(Locale.getDefault()))
-                }
-            }
+                String.format("%d ms", inferenceTime)
 
             fragmentCameraBinding.overlay.setResults(
-                filteredResults ?: LinkedList<ObjectDetection>(),
+                results,
                 imageHeight,
                 imageWidth
             )
@@ -352,20 +305,5 @@ class CameraFragment : Fragment(),
         activity?.runOnUiThread {
             Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
         }
-    }
-
-    companion object {
-        val CATEGORY_MAP = mapOf(
-            0 to null, // Todas las Clases
-            1 to setOf("persona", "person"),
-            2 to setOf("bicicleta", "coche", "motocicleta", "avión", "autobús", "tren", "camión", "barco", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat"),
-            3 to setOf("pájaro", "gato", "perro", "caballo", "oveja", "vaca", "elefante", "oso", "cebra", "jirafa", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe"),
-            4 to setOf("mochila", "paraguas", "bolso", "corbata", "maleta", "backpack", "umbrella", "handbag", "tie", "suitcase"),
-            5 to setOf("frisbee", "esquís", "snowboard", "balón", "cometa", "bate de béisbol", "guante de béisbol", "monopatín", "tabla de surf", "raqueta de tenis", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "skis"),
-            6 to setOf("botella", "copa de vino", "taza", "tenedor", "cuchillo", "cuchara", "tazón", "plátano", "manzana", "sándwich", "naranja", "brócoli", "zanahoria", "perrito caliente", "pizza", "dónut", "pastel", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "donut", "cake"),
-            7 to setOf("banco", "silla", "sofá", "planta en maceta", "cama", "mesa de comedor", "inodoro", "bench", "chair", "couch", "potted plant", "bed", "dining table", "toilet"),
-            8 to setOf("televisión", "portátil", "ratón", "mando a distancia", "teclado", "teléfono móvil", "microondas", "horno", "tostadora", "fregadero", "frigorífico", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator"),
-            9 to setOf("semáforo", "boca de incendio", "señal de stop", "parquímetro", "libro", "reloj", "florero", "tijeras", "oso de peluche", "secador de pelo", "cepillo de dientes", "traffic light", "fire hydrant", "stop sign", "parking meter", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush")
-        )
     }
 }

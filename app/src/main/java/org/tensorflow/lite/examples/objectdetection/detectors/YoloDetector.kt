@@ -8,7 +8,6 @@ import com.ultralytics.yolo.predict.detect.DetectedObject
 import com.ultralytics.yolo.predict.detect.TfliteDetector
 import org.tensorflow.lite.support.image.TensorImage
 
-
 class YoloDetector(
     var confidenceThreshold: Float = 0.5f,
     var iouThreshold: Float = 0.3f,
@@ -23,14 +22,11 @@ class YoloDetector(
     private var ip: ImageProcessing
 
     init {
-
         yolo = TfliteDetector(context)
         yolo.setIouThreshold(iouThreshold)
         yolo.setConfidenceThreshold(confidenceThreshold)
 
-        // val modelPath = "YOLO11n-catsdogs_float32.tflite"
-        // val metadataPath = "metadata-catsdogs.yaml"
-        val modelPath = "yolo11n_float32.tflite"
+        val modelPath = "yolov26n_float32.tflite"
         val metadataPath = "metadata.yaml"
 
         val config = LocalYoloModel(
@@ -47,11 +43,9 @@ class YoloDetector(
         )
 
         ip = ImageProcessing()
-
     }
 
-    override fun detect(image: TensorImage, imageRotation: Int): DetectionResult  {
-
+    override fun detect(image: TensorImage, imageRotation: Int): DetectionResult {
         val bitmap = image.bitmap
 
         val ppImage = yolo.preprocess(bitmap)
@@ -59,20 +53,15 @@ class YoloDetector(
 
         val detections = ArrayList<ObjectDetection>()
 
-        // ASPECT_RATIO = 4:3
-        // => imgW = imgH * 3/4
         var imgH: Int
         var imgW: Int
         if (imageRotation == 90 || imageRotation == 270) {
             imgH = ppImage.height
             imgW = imgH * 3 / 4
-        }
-        else {
+        } else {
             imgW = ppImage.width
             imgH = imgW * 3 / 4
-
         }
-
 
         for (result: DetectedObject in results) {
             val category = Category(
@@ -102,8 +91,5 @@ class YoloDetector(
         val ret = DetectionResult(ppImage, detections)
         ret.info = yolo.stats
         return ret
-
     }
-
-
 }

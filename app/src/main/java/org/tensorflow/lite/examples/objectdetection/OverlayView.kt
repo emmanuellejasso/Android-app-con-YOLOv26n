@@ -35,6 +35,7 @@ import kotlin.math.max
 class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
     private var results: List<ObjectDetection> = LinkedList<ObjectDetection>()
+    private var personDetections: List<PersonDetection> = LinkedList<PersonDetection>()
 
     // Estimación de pose con MediaPipe
     var isPoseEstimationEnabled: Boolean = false
@@ -44,6 +45,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var boxFillPaint = Paint()
     private var textBackgroundPaint = Paint()
     private var textPaint = Paint()
+    private var subTextPaint = Paint()
 
     private var skeletonPaint = Paint()
     private var jointPaint = Paint()
@@ -53,6 +55,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
     private var scaleFactor: Float = 1f
     private var bounds = Rect()
+    private var subBounds = Rect()
 
     private var currentImageHeight: Int = 1
     private var currentImageWidth: Int = 1
@@ -78,6 +81,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
     fun clear() {
         textPaint.reset()
+        subTextPaint.reset()
         textBackgroundPaint.reset()
         boxPaint.reset()
         boxFillPaint.reset()
@@ -92,23 +96,24 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     }
 
     private fun initPaints() {
-        // Modern Pill Background for Label
-        textBackgroundPaint.color = Color.parseColor("#E61A202C")
+        textBackgroundPaint.color = Color.parseColor("#EE1A202C")
         textBackgroundPaint.style = Paint.Style.FILL
 
-        // Modern White Bold Text
         textPaint.color = Color.WHITE
         textPaint.style = Paint.Style.FILL
-        textPaint.textSize = 42f
+        textPaint.textSize = 38f
         textPaint.isFakeBoldText = true
 
-        // Modern Neon Cyan Bounding Box Stroke
+        subTextPaint.color = Color.parseColor("#FFD700") // Amarillo neón para la distancia
+        subTextPaint.style = Paint.Style.FILL
+        subTextPaint.textSize = 34f
+        subTextPaint.isFakeBoldText = true
+
         boxPaint.color = ContextCompat.getColor(context!!, R.color.bounding_box_color)
         boxPaint.strokeWidth = 6f
         boxPaint.style = Paint.Style.STROKE
         boxPaint.isAntiAlias = true
 
-        // Semi-transparent box fill
         boxFillPaint.color = Color.parseColor("#2000E5FF")
         boxFillPaint.style = Paint.Style.FILL
         boxFillPaint.isAntiAlias = true
@@ -119,7 +124,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         skeletonPaint.style = Paint.Style.STROKE
         skeletonPaint.isAntiAlias = true
 
-        // Puntos Clave generales (Caderas, Rodillas, Tobillos)
+        // Puntos Clave generales
         jointPaint.color = Color.parseColor("#FF0055") // Magenta neón
         jointPaint.style = Paint.Style.FILL
         jointPaint.isAntiAlias = true
@@ -145,8 +150,12 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
 
-        for (result in results) {
-            val boundingBox = result.boundingBox
+        val cyanColor = Color.parseColor("#00E5FF")
+        boxPaint.color = cyanColor
+        boxFillPaint.color = Color.parseColor("#2500E5FF")
+
+        for (personDet in personDetections) {
+            val boundingBox = personDet.originalDetection.boundingBox
 
             val top = boundingBox.top * scaleFactor
             val bottom = boundingBox.bottom * scaleFactor
@@ -155,7 +164,6 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
             val drawableRect = RectF(left, top, right, bottom)
 
-            // Draw semi-transparent box fill and rounded neon stroke
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxFillPaint)
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxPaint)
 
@@ -164,39 +172,45 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
                 drawPoseForPerson(canvas, drawableRect)
             }
 
-            // Label + Confidence percentage
-            val confidencePct = (result.category.confidence * 100).toInt()
-            val drawableText = "${result.category.label} ${confidencePct}%"
+            val confidencePct = (personDet.originalDetection.category.confidence * 100).toInt()
+            val line1Text = "👤 Persona ($confidencePct%)"
+            val line2Text = String.format(Locale.US, "D: %.2f m", personDet.estimatedDistanceMeters)
 
-            textPaint.getTextBounds(drawableText, 0, drawableText.length, bounds)
-            val textWidth = bounds.width()
-            val textHeight = bounds.height()
+            textPaint.getTextBounds(line1Text, 0, line1Text.length, bounds)
+            subTextPaint.getTextBounds(line2Text, 0, line2Text.length, subBounds)
 
-            val textPaddingHorizontal = 16f
-            val textPaddingVertical = 12f
+            val maxTextWidth = max(bounds.width(), subBounds.width()).toFloat()
+            val totalTextHeight = bounds.height() + subBounds.height() + 16f
+
+            val paddingH = 18f
+            val paddingV = 14f
 
             val bgRect = RectF(
                 left,
-                top - textHeight - textPaddingVertical * 2,
-                left + textWidth + textPaddingHorizontal * 2,
+                top - totalTextHeight - paddingV * 2,
+                left + maxTextWidth + paddingH * 2,
                 top
             )
 
-            // If badge goes off top of screen, show inside top of box
             if (bgRect.top < 0) {
                 bgRect.top = top
-                bgRect.bottom = top + textHeight + textPaddingVertical * 2
+                bgRect.bottom = top + totalTextHeight + paddingV * 2
             }
 
-            // Draw rounded pill background behind text
-            canvas.drawRoundRect(bgRect, 12f, 12f, textBackgroundPaint)
+            canvas.drawRoundRect(bgRect, 14f, 14f, textBackgroundPaint)
 
-            // Draw text centered inside pill badge
             canvas.drawText(
-                drawableText,
-                bgRect.left + textPaddingHorizontal,
-                bgRect.bottom - textPaddingVertical,
+                line1Text,
+                bgRect.left + paddingH,
+                bgRect.top + paddingV + bounds.height(),
                 textPaint
+            )
+
+            canvas.drawText(
+                line2Text,
+                bgRect.left + paddingH,
+                bgRect.bottom - paddingV,
+                subTextPaint
             )
         }
     }
@@ -226,7 +240,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             }
         } ?: return
 
-        // Calcular los límites (bounding box) del esqueleto detectado
+        // Calcular los límites del esqueleto detectado
         var minX = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE
         var minY = Float.MAX_VALUE
@@ -255,7 +269,6 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         val targetW = rect.width() - paddingH * 2f
         val targetH = rect.height() - paddingV * 2f
 
-        // Función auxiliar para ajustar cada punto exactamente DENTRO del recuadro azul
         fun fitPoint(idx: Int): Pair<Float, Float> {
             val (rx, ry) = rawPoints[idx]
             val relX = (rx - minX) / poseW
@@ -265,7 +278,6 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             return Pair(fitX, fitY)
         }
 
-        // Dibujar las conexiones del esqueleto ajustadas 100% dentro del recuadro azul
         for (connection in POSE_CONNECTIONS) {
             val startIdx = connection.first
             val endIdx = connection.second
@@ -279,7 +291,6 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             }
         }
 
-        // Dibujar los puntos clave (Landmarks) ajustados 100% dentro del recuadro azul
         for (idx in rawPoints.indices) {
             val (x, y) = fitPoint(idx)
 
@@ -288,7 +299,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
                 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 -> armJointPaint // Hombros, Codos, Muñecas y Manos (Amarillo)
                 else -> jointPaint // Caderas, Rodillas, Tobillos (Magenta Neón)
             }
-            val radius = if (idx in 15..22) 13f else 10f // Manos y dedos resaltados
+            val radius = if (idx in 15..22) 13f else 10f
 
             canvas.drawCircle(x, y, radius, paint)
         }
@@ -300,10 +311,18 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         imageWidth: Int,
         imageRotation: Int = 90
     ) {
-        results = detectionResults
+        // Filtrar estricta y únicamente detecciones de tipo Persona
+        val personOnlyResults = detectionResults.filter {
+            PersonDistanceEstimatorHelper.isPerson(it.category.label)
+        }
+
+        results = personOnlyResults
         currentImageHeight = imageHeight
         currentImageWidth = imageWidth
         currentImageRotation = if (imageRotation == 0) 90 else imageRotation
+
+        personDetections = personOnlyResults
+            .map { PersonDistanceEstimatorHelper.processDetection(it, imageHeight) }
 
         scaleFactor = max(width * 1f / imageWidth, height * 1f / imageHeight)
     }
