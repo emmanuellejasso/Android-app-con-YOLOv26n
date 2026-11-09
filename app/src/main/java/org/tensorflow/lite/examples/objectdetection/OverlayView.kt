@@ -167,7 +167,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         for (personDet in personDetections) {
             val normBbox = personDet.originalDetection.boundingBox
 
-            // Proyección exacta de coordenadas normalizadas (0.0 .. 1.0) a píxeles de pantalla
+            // Alineación exacta con PreviewView (scaleType="fillStart") a partir de (0, 0)
             val left = normBbox.left * rotatedWidth * scaleFactor + offsetX
             val top = normBbox.top * rotatedHeight * scaleFactor + offsetY
             val right = normBbox.right * rotatedWidth * scaleFactor + offsetX
@@ -335,9 +335,10 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             rotatedHeight = imageHeight
         }
 
+        // Alineación con PreviewView (app:scaleType="fillStart") que inicia en (0, 0)
         scaleFactor = max(width * 1f / rotatedWidth, height * 1f / rotatedHeight)
-        offsetX = (width - rotatedWidth * scaleFactor) / 2f
-        offsetY = (height - rotatedHeight * scaleFactor) / 2f
+        offsetX = 0f
+        offsetY = 0f
 
         personDetections = personOnlyResults
             .map {
