@@ -37,8 +37,8 @@
     </string-array>
 
     <string-array name="categories_spinner_titles">
+        <item>👥 Solo Personas (Distancia ~1.65m)</item>
         <item>🌟 Todas las Clases</item>
-        <item>👥 Personas</item>
         <item>🚗 Vehículos y Transporte</item>
         <item>🐶 Animales</item>
         <item>🎒 Accesorios Personales</item>

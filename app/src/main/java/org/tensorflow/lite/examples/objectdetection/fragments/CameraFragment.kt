@@ -356,8 +356,8 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
 
     companion object {
         val CATEGORY_MAP = mapOf(
-            0 to null, // Todas las Clases
-            1 to setOf("persona", "person"),
+            0 to setOf("persona", "person"), // Solo Personas (Distancia CDMX)
+            1 to null, // Todas las Clases
             2 to setOf("bicicleta", "coche", "motocicleta", "avión", "autobús", "tren", "camión", "barco", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat"),
             3 to setOf("pájaro", "gato", "perro", "caballo", "oveja", "vaca", "elefante", "oso", "cebra", "jirafa", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe"),
             4 to setOf("mochila", "paraguas", "bolso", "corbata", "maleta", "backpack", "umbrella", "handbag", "tie", "suitcase"),
