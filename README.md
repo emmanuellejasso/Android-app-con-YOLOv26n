@@ -1,6 +1,6 @@
 # Detección de Distancia de Peatones con YOLO26 🚀
 
-**Detección de Distancia de Peatones con YOLO26** es una aplicación móvil de visión por computadora para Android desarrollada para realizar **detección de personas y estimación de distancia en tiempo real** utilizando la cámara en vivo y modelos de inteligencia artificial como **Ultralytics YOLOv26n** y **TensorFlow Lite**.
+**Detección de Distancia de Peatones con YOLO26** es una aplicación móvil de visión por computadora para Android desarrollada para realizar **detección exclusiva de personas, estimación de pose y cálculo de distancia en tiempo real** utilizando la cámara en vivo y modelos de inteligencia artificial como **Ultralytics YOLOv26n** y **TensorFlow Lite**.
 
 ---
 
@@ -12,13 +12,13 @@
 
 ## ✨ Características Principales
 
-* 👤 **Detección Exclusiva de Peatones:** Identifica en tiempo real a personas en el flujo de la cámara.
-* 📏 **Estimación Óptica de Distancia:** Calcula la distancia estimada en metros ($D = \frac{f_y \cdot H_{real}}{h_{bbox}}$) basándose en la estatura promedio de 1.65 m y la altura en píxeles del cuadro delimitador.
-* ⚡ **Modo Acelerado de Inferencia (Switch):**
-  * **YOLOv26n (Predeterminado):** Máxima precisión de detección de personas (~45 ms).
-  * **MobileNet SSD V1 (Modo Alta Velocidad):** Máxima velocidad de inferencia (~11 ms).
+* 👤 **Detección Exclusiva de Peatones:** Identifica en tiempo real únicamente a personas en el flujo de la cámara (filtrando cualquier otra categoría no deseada).
+* 📏 **Algoritmo de Distancia (Cintura a Cabeza 38%):** Calcula la distancia óptica en metros ($D = \frac{f_y \cdot H_{cintura\_cabeza}}{h_{segmento\_px}}$) midiendo el segmento de la cintura a la cabeza (38% de la estatura total promedio de 1.65 m = **0.627 m**).
+* 🦴 **Switch de Estimación de Pose:** Botón conmutable para habilitar en tiempo real la superposición gráfica del esqueleto corporal y la línea de cintura de referencia.
+* ⚡ **Switch de Modo Alta Velocidad:**
+  * **YOLOv26n (Predeterminado):** Máxima precisión para detección de peatones (~45 ms).
+  * **MobileNet SSD V1 (Activado):** Máxima velocidad de inferencia (~11 ms).
 * ⚙️ **Panel de Control Dinámico:** Umbral de confianza, resultados máximos, hilos de ejecución y aceleración por hardware (CPU/GPU/NNAPI).
-* 🎨 **Diseño Limpio y Moderno:** Interfaz estilizada *Dark Glassmorphism* sin distractores visuales.
 
 ---
 

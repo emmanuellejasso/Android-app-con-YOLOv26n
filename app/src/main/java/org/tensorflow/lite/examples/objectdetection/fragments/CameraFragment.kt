@@ -172,6 +172,15 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
             }
             updateControlsUi()
         }
+
+        // Pose estimation switch
+        fragmentCameraBinding.bottomSheetLayout.switchPoseEstimation.isChecked =
+            fragmentCameraBinding.overlay.isPoseEstimationEnabled
+
+        fragmentCameraBinding.bottomSheetLayout.switchPoseEstimation.setOnCheckedChangeListener { _, isChecked ->
+            fragmentCameraBinding.overlay.isPoseEstimationEnabled = isChecked
+            fragmentCameraBinding.overlay.invalidate()
+        }
     }
 
     private fun updateControlsUi() {

@@ -19,6 +19,7 @@
     <string name="label_threads">Número de Hilos</string>
     <string name="label_delegate">Aceleración (Hardware)</string>
     <string name="label_high_speed_mode">Incrementar velocidad de inferencia</string>
+    <string name="label_pose_estimation">Estimación de pose</string>
 
     <string-array name="delegate_spinner_titles">
         <item>CPU</item>
