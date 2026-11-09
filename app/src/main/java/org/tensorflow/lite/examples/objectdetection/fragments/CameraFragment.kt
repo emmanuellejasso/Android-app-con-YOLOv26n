@@ -20,6 +20,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -36,6 +37,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.navigation.Navigation
+import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import org.tensorflow.lite.examples.objectdetection.ObjectDetectorHelper
@@ -44,7 +46,9 @@ import org.tensorflow.lite.examples.objectdetection.R
 import org.tensorflow.lite.examples.objectdetection.databinding.FragmentCameraBinding
 import org.tensorflow.lite.examples.objectdetection.detectors.ObjectDetection
 
-class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
+class CameraFragment : Fragment(),
+    ObjectDetectorHelper.DetectorListener,
+    PoseLandmarkerHelper.LandmarkerListener {
 
     private var _fragmentCameraBinding: FragmentCameraBinding? = null
 
@@ -100,7 +104,8 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
         )
 
         poseLandmarkerHelper = PoseLandmarkerHelper(
-            context = requireContext()
+            context = requireContext(),
+            poseLandmarkerListener = this
         )
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -278,8 +283,8 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
 
         if (fragmentCameraBinding.overlay.isPoseEstimationEnabled && ::poseLandmarkerHelper.isInitialized) {
             val rotatedBitmap = rotateBitmap(bitmapBuffer, imageRotation.toFloat())
-            val poseResult = poseLandmarkerHelper.detect(rotatedBitmap)
-            fragmentCameraBinding.overlay.poseLandmarkerResult = poseResult
+            val frameTime = SystemClock.uptimeMillis()
+            poseLandmarkerHelper.detectAsync(rotatedBitmap, frameTime)
         } else {
             fragmentCameraBinding.overlay.poseLandmarkerResult = null
         }
@@ -316,6 +321,13 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
                 currentImageRotation
             )
 
+            fragmentCameraBinding.overlay.invalidate()
+        }
+    }
+
+    override fun onResults(result: PoseLandmarkerResult) {
+        activity?.runOnUiThread {
+            fragmentCameraBinding.overlay.poseLandmarkerResult = result
             fragmentCameraBinding.overlay.invalidate()
         }
     }

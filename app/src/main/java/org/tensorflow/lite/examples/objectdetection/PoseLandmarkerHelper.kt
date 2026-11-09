@@ -2,7 +2,10 @@ package org.tensorflow.lite.examples.objectdetection
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
+import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -23,7 +26,7 @@ class PoseLandmarkerHelper(
         try {
             val baseOptionsBuilder = BaseOptions.builder()
                 .setModelAssetPath("pose_landmarker.task")
-                .setDelegate(Delegate.CPU)
+                .setDelegate(Delegate.GPU)
 
             val optionsBuilder = PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(baseOptionsBuilder.build())
@@ -31,23 +34,52 @@ class PoseLandmarkerHelper(
                 .setMinPosePresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
                 .setNumPoses(3)
-                .setRunningMode(RunningMode.IMAGE)
+                .setRunningMode(RunningMode.LIVE_STREAM)
+                .setResultListener { result: PoseLandmarkerResult, _: MPImage ->
+                    poseLandmarkerListener?.onResults(result)
+                }
+                .setErrorListener { error ->
+                    Log.e("MediaPipePose", "Error en MediaPipe Pose: ${error.message}")
+                    poseLandmarkerListener?.onError("Error: ${error.message}")
+                }
 
             poseLandmarker = PoseLandmarker.createFromOptions(context, optionsBuilder.build())
         } catch (e: Exception) {
-            poseLandmarkerListener?.onError("Error al inicializar MediaPipe Pose: ${e.message}")
+            try {
+                val baseOptionsBuilder = BaseOptions.builder()
+                    .setModelAssetPath("pose_landmarker.task")
+                    .setDelegate(Delegate.CPU)
+
+                val optionsBuilder = PoseLandmarker.PoseLandmarkerOptions.builder()
+                    .setBaseOptions(baseOptionsBuilder.build())
+                    .setMinPoseDetectionConfidence(0.5f)
+                    .setMinPosePresenceConfidence(0.5f)
+                    .setMinTrackingConfidence(0.5f)
+                    .setNumPoses(3)
+                    .setRunningMode(RunningMode.LIVE_STREAM)
+                    .setResultListener { result: PoseLandmarkerResult, _: MPImage ->
+                        poseLandmarkerListener?.onResults(result)
+                    }
+                    .setErrorListener { error ->
+                        poseLandmarkerListener?.onError("Error: ${error.message}")
+                    }
+
+                poseLandmarker = PoseLandmarker.createFromOptions(context, optionsBuilder.build())
+            } catch (fallbackEx: Exception) {
+                poseLandmarkerListener?.onError("Error al inicializar MediaPipe Pose: ${fallbackEx.message}")
+            }
         }
     }
 
-    fun detect(bitmap: Bitmap): PoseLandmarkerResult? {
+    fun detectAsync(bitmap: Bitmap, frameTimeMs: Long = SystemClock.uptimeMillis()) {
         if (poseLandmarker == null) {
             setupPoseLandmarker()
         }
-        return try {
+        try {
             val mpImage = BitmapImageBuilder(bitmap).build()
-            poseLandmarker?.detect(mpImage)
+            poseLandmarker?.detectAsync(mpImage, frameTimeMs)
         } catch (e: Exception) {
-            null
+            Log.e("MediaPipePose", "Error en detectAsync: ${e.message}")
         }
     }
 
@@ -58,5 +90,6 @@ class PoseLandmarkerHelper(
 
     interface LandmarkerListener {
         fun onError(error: String)
+        fun onResults(result: PoseLandmarkerResult)
     }
 }
