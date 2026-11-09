@@ -159,9 +159,9 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxFillPaint)
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxPaint)
 
-            // Si la estimación de pose está habilitada, mapear los puntos clave de MediaPipe exactamente DENTRO de drawableRect en posición vertical
+            // Si la estimación de pose está habilitada, renderizar la pose ÚNICAMENTE que corresponda a esta persona
             if (isPoseEstimationEnabled) {
-                drawPoseInsideRect(canvas, drawableRect)
+                drawPoseForPerson(canvas, drawableRect)
             }
 
             // Label + Confidence percentage
@@ -201,80 +201,64 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         }
     }
 
-    private fun drawPoseInsideRect(canvas: Canvas, rect: RectF) {
+    private fun drawPoseForPerson(canvas: Canvas, rect: RectF) {
         val landmarksList = poseLandmarkerResult?.landmarks()
         if (landmarksList.isNullOrEmpty()) return
 
-        val boxLeft = rect.left
-        val boxTop = rect.top
-        val boxWidth = rect.width()
-        val boxHeight = rect.height()
+        // Emparejar el esqueleto de MediaPipe que le pertenece ÚNICAMENTE a esta persona (cuya cabeza/cadera cae dentro de su caja)
+        val matchedPose = landmarksList.find { poseLandmarks ->
+            if (poseLandmarks.size > 24) {
+                val nose = poseLandmarks[0]
+                val leftHip = poseLandmarks[23]
+                val rightHip = poseLandmarks[24]
 
-        for (poseLandmarks in landmarksList) {
-            // Dibujar conexiones entre puntos clave proyectados erguidos en posición vertical (Portrait)
-            for (connection in POSE_CONNECTIONS) {
-                val startIdx = connection.first
-                val endIdx = connection.second
+                val noseX = (1.0f - nose.y()) * width
+                val noseY = nose.x() * height
 
-                if (startIdx < poseLandmarks.size && endIdx < poseLandmarks.size) {
-                    val startLm = poseLandmarks[startIdx]
-                    val endLm = poseLandmarks[endIdx]
+                val hipX = (1.0f - (leftHip.y() + rightHip.y()) / 2f) * width
+                val hipY = ((leftHip.x() + rightHip.x()) / 2f) * height
 
-                    val (startX, startY) = mapNormalizedLandmark(
-                        startLm.x(), startLm.y(),
-                        boxLeft, boxTop, boxWidth, boxHeight,
-                        currentImageRotation
-                    )
-                    val (endX, endY) = mapNormalizedLandmark(
-                        endLm.x(), endLm.y(),
-                        boxLeft, boxTop, boxWidth, boxHeight,
-                        currentImageRotation
-                    )
-
-                    val paintToUse = if (startIdx == 23 && endIdx == 24) waistLinePaint else skeletonPaint
-                    canvas.drawLine(startX, startY, endX, endY, paintToUse)
-                }
+                val margin = 80f
+                (noseX in (rect.left - margin)..(rect.right + margin) && noseY in (rect.top - margin)..(rect.bottom + margin)) ||
+                (hipX in (rect.left - margin)..(rect.right + margin) && hipY in (rect.top - margin)..(rect.bottom + margin))
+            } else {
+                false
             }
+        } ?: return
 
-            // Dibujar puntos clave (Landmarks) para cabeza, hombros, codos, manos, cadera y piernas
-            for ((idx, lm) in poseLandmarks.withIndex()) {
-                val (x, y) = mapNormalizedLandmark(
-                    lm.x(), lm.y(),
-                    boxLeft, boxTop, boxWidth, boxHeight,
-                    currentImageRotation
-                )
+        // Dibujar las conexiones del esqueleto ÚNICAMENTE para esta persona
+        for (connection in POSE_CONNECTIONS) {
+            val startIdx = connection.first
+            val endIdx = connection.second
 
-                val paint = when (idx) {
-                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 -> headJointPaint // Cabeza / Rostro (Cian Neón)
-                    11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 -> armJointPaint // Hombros, Codos, Muñecas y Manos (Amarillo/Verde)
-                    else -> jointPaint // Caderas, Rodillas, Tobillos (Magenta Neón)
-                }
-                val radius = if (idx in 15..22) 13f else 10f // Manos y dedos resaltados
+            if (startIdx < matchedPose.size && endIdx < matchedPose.size) {
+                val startLm = matchedPose[startIdx]
+                val endLm = matchedPose[endIdx]
 
-                canvas.drawCircle(x, y, radius, paint)
+                val startX = (1.0f - startLm.y()) * width
+                val startY = startLm.x() * height
+                val endX = (1.0f - endLm.y()) * width
+                val endY = endLm.x() * height
+
+                val paintToUse = if (startIdx == 23 && endIdx == 24) waistLinePaint else skeletonPaint
+                canvas.drawLine(startX, startY, endX, endY, paintToUse)
             }
         }
-    }
 
-    private fun mapNormalizedLandmark(
-        normX: Float,
-        normY: Float,
-        boxLeft: Float,
-        boxTop: Float,
-        boxWidth: Float,
-        boxHeight: Float,
-        rotationDegrees: Int
-    ): Pair<Float, Float> {
-        // Rotación de 90° vertical para modo Portrait del sensor de la cámara:
-        // x_portrait = 1.0 - normY
-        // y_portrait = normX
-        val (mappedX, mappedY) = when (rotationDegrees) {
-            270 -> Pair(normY, 1.0f - normX)
-            180 -> Pair(1.0f - normX, 1.0f - normY)
-            0 -> Pair(normX, normY)
-            else -> Pair(1.0f - normY, normX) // 90° Estándar para uso en Portrait
+        // Dibujar los puntos clave (Landmarks) ÚNICAMENTE para esta persona
+        for ((idx, lm) in matchedPose.withIndex()) {
+            val x = (1.0f - lm.y()) * width
+            val y = lm.x() * height
+
+            val paint = when (idx) {
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 -> headJointPaint // Cabeza / Rostro (Cian Neón)
+                11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 -> armJointPaint // Hombros, Codos, Muñecas y Manos (Amarillo)
+                else -> jointPaint // Caderas, Rodillas, Tobillos (Magenta Neón)
+            }
+            val radius = if (idx in 15..22) 13f else 10f // Manos y dedos resaltados
+
+            canvas.drawCircle(x, y, radius, paint)
         }
-        return Pair(boxLeft + mappedX * boxWidth, boxTop + mappedY * boxHeight)
     }
 
     fun setResults(
