@@ -159,7 +159,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxFillPaint)
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxPaint)
 
-            // Si la estimación de pose está habilitada, renderizar la pose ÚNICAMENTE que corresponda a esta persona
+            // Si la estimación de pose está habilitada, renderizar la pose ÚNICAMENTE que corresponda a esta persona ajustada dentro de rect
             if (isPoseEstimationEnabled) {
                 drawPoseForPerson(canvas, drawableRect)
             }
@@ -226,29 +226,62 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             }
         } ?: return
 
-        // Dibujar las conexiones del esqueleto ÚNICAMENTE para esta persona
+        // Calcular los límites (bounding box) del esqueleto detectado
+        var minX = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+
+        val rawPoints = ArrayList<Pair<Float, Float>>(matchedPose.size)
+        for (lm in matchedPose) {
+            val rx = (1.0f - lm.y()) * width
+            val ry = lm.x() * height
+            rawPoints.add(Pair(rx, ry))
+
+            if (rx < minX) minX = rx
+            if (rx > maxX) maxX = rx
+            if (ry < minY) minY = ry
+            if (ry > maxY) maxY = ry
+        }
+
+        val poseW = max(1f, maxX - minX)
+        val poseH = max(1f, maxY - minY)
+
+        // Definir el área objetivo con un margen interno (5%) dentro del recuadro azul (rect)
+        val paddingH = rect.width() * 0.05f
+        val paddingV = rect.height() * 0.05f
+        val targetLeft = rect.left + paddingH
+        val targetTop = rect.top + paddingV
+        val targetW = rect.width() - paddingH * 2f
+        val targetH = rect.height() - paddingV * 2f
+
+        // Función auxiliar para ajustar cada punto exactamente DENTRO del recuadro azul
+        fun fitPoint(idx: Int): Pair<Float, Float> {
+            val (rx, ry) = rawPoints[idx]
+            val relX = (rx - minX) / poseW
+            val relY = (ry - minY) / poseH
+            val fitX = targetLeft + relX * targetW
+            val fitY = targetTop + relY * targetH
+            return Pair(fitX, fitY)
+        }
+
+        // Dibujar las conexiones del esqueleto ajustadas 100% dentro del recuadro azul
         for (connection in POSE_CONNECTIONS) {
             val startIdx = connection.first
             val endIdx = connection.second
 
-            if (startIdx < matchedPose.size && endIdx < matchedPose.size) {
-                val startLm = matchedPose[startIdx]
-                val endLm = matchedPose[endIdx]
-
-                val startX = (1.0f - startLm.y()) * width
-                val startY = startLm.x() * height
-                val endX = (1.0f - endLm.y()) * width
-                val endY = endLm.x() * height
+            if (startIdx < rawPoints.size && endIdx < rawPoints.size) {
+                val (startX, startY) = fitPoint(startIdx)
+                val (endX, endY) = fitPoint(endIdx)
 
                 val paintToUse = if (startIdx == 23 && endIdx == 24) waistLinePaint else skeletonPaint
                 canvas.drawLine(startX, startY, endX, endY, paintToUse)
             }
         }
 
-        // Dibujar los puntos clave (Landmarks) ÚNICAMENTE para esta persona
-        for ((idx, lm) in matchedPose.withIndex()) {
-            val x = (1.0f - lm.y()) * width
-            val y = lm.x() * height
+        // Dibujar los puntos clave (Landmarks) ajustados 100% dentro del recuadro azul
+        for (idx in rawPoints.indices) {
+            val (x, y) = fitPoint(idx)
 
             val paint = when (idx) {
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 -> headJointPaint // Cabeza / Rostro (Cian Neón)
