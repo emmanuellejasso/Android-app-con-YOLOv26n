@@ -18,6 +18,7 @@ package org.tensorflow.lite.examples.objectdetection.fragments
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -57,6 +58,8 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
+
+    private var currentImageRotation: Int = 90
 
     /** Blocking camera operations are performed using this executor */
     private lateinit var cameraExecutor: ExecutorService
@@ -270,15 +273,25 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
             bitmapBuffer.copyPixelsFromBuffer(image.planes[0].buffer)
         }
 
+        val imageRotation = image.imageInfo.rotationDegrees
+        currentImageRotation = imageRotation
+
         if (fragmentCameraBinding.overlay.isPoseEstimationEnabled && ::poseLandmarkerHelper.isInitialized) {
-            val poseResult = poseLandmarkerHelper.detect(bitmapBuffer)
+            val rotatedBitmap = rotateBitmap(bitmapBuffer, imageRotation.toFloat())
+            val poseResult = poseLandmarkerHelper.detect(rotatedBitmap)
             fragmentCameraBinding.overlay.poseLandmarkerResult = poseResult
         } else {
             fragmentCameraBinding.overlay.poseLandmarkerResult = null
         }
 
-        val imageRotation = image.imageInfo.rotationDegrees
         objectDetectorHelper.detect(bitmapBuffer, imageRotation)
+    }
+
+    private fun rotateBitmap(source: Bitmap, angle: Float): Bitmap {
+        if (angle == 0f) return source
+        val matrix = Matrix()
+        matrix.postRotate(angle)
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -299,7 +312,8 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
             fragmentCameraBinding.overlay.setResults(
                 results,
                 imageHeight,
-                imageWidth
+                imageWidth,
+                currentImageRotation
             )
 
             fragmentCameraBinding.overlay.invalidate()

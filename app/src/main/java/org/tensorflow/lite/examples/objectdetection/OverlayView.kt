@@ -47,6 +47,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var subTextPaint = Paint()
     private var skeletonPaint = Paint()
     private var jointPaint = Paint()
+    private var headJointPaint = Paint()
+    private var armJointPaint = Paint()
     private var waistLinePaint = Paint()
 
     private var scaleFactor: Float = 1f
@@ -55,16 +57,20 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
     private var currentImageHeight: Int = 1
     private var currentImageWidth: Int = 1
+    private var rotatedWidth: Int = 1
+    private var rotatedHeight: Int = 1
 
     companion object {
         // Conexiones de los 33 puntos clave (landmarks) de MediaPipe Pose
         private val POSE_CONNECTIONS = listOf(
-            Pair(0, 1), Pair(1, 2), Pair(2, 3), Pair(0, 4), Pair(4, 5), Pair(5, 6), Pair(9, 10), // Rostro
+            Pair(0, 1), Pair(1, 2), Pair(2, 3), Pair(0, 4), Pair(4, 5), Pair(5, 6), Pair(9, 10), // Rostro / Cabeza
             Pair(11, 12), // Hombros
-            Pair(11, 13), Pair(13, 15), Pair(12, 14), Pair(14, 16), // Brazos
+            Pair(11, 13), Pair(13, 15), Pair(15, 17), Pair(15, 19), Pair(15, 21), // Brazo Izquierdo y Mano
+            Pair(12, 14), Pair(14, 16), Pair(16, 18), Pair(16, 20), Pair(16, 22), // Brazo Derecho y Mano
             Pair(11, 23), Pair(12, 24), // Torso
-            Pair(23, 24), // Cintura / Caderas
-            Pair(23, 25), Pair(25, 27), Pair(24, 26), Pair(26, 28) // Piernas
+            Pair(23, 24), // Cintura / Caderas (38% línea de cintura)
+            Pair(23, 25), Pair(25, 27), Pair(27, 29), Pair(29, 31), // Pierna Izquierda
+            Pair(24, 26), Pair(26, 28), Pair(28, 30), Pair(30, 32)  // Pierna Derecha
         )
     }
 
@@ -80,6 +86,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         boxFillPaint.reset()
         skeletonPaint.reset()
         jointPaint.reset()
+        headJointPaint.reset()
+        armJointPaint.reset()
         waistLinePaint.reset()
         poseLandmarkerResult = null
         invalidate()
@@ -111,18 +119,28 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
         // Esqueleto MediaPipe Pose (Líneas)
         skeletonPaint.color = Color.parseColor("#00FF66") // Verde neón
-        skeletonPaint.strokeWidth = 6f
+        skeletonPaint.strokeWidth = 7f
         skeletonPaint.style = Paint.Style.STROKE
         skeletonPaint.isAntiAlias = true
 
-        // Articulaciones / Puntos Clave (Landmarks)
+        // Articulaciones / Puntos Clave generales (Caderas, Rodillas, Tobillos)
         jointPaint.color = Color.parseColor("#FF0055") // Magenta neón
         jointPaint.style = Paint.Style.FILL
         jointPaint.isAntiAlias = true
 
+        // Puntos Clave de Cabeza y Rostro (Cian Neón)
+        headJointPaint.color = Color.parseColor("#00E5FF")
+        headJointPaint.style = Paint.Style.FILL
+        headJointPaint.isAntiAlias = true
+
+        // Puntos Clave de Hombros, Codos, Muñecas y Manos (Amarillo/Verde Neón)
+        armJointPaint.color = Color.parseColor("#FFD700")
+        armJointPaint.style = Paint.Style.FILL
+        armJointPaint.isAntiAlias = true
+
         // Línea de Cintura (Landmarks 23-24)
         waistLinePaint.color = Color.parseColor("#FFD700") // Dorado
-        waistLinePaint.strokeWidth = 5f
+        waistLinePaint.strokeWidth = 6f
         waistLinePaint.style = Paint.Style.STROKE
         waistLinePaint.pathEffect = DashPathEffect(floatArrayOf(12f, 12f), 0f)
         waistLinePaint.isAntiAlias = true
@@ -223,21 +241,29 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
                     val startLm = poseLandmarks[startIdx]
                     val endLm = poseLandmarks[endIdx]
 
-                    val startX = startLm.x() * width
-                    val startY = startLm.y() * height
-                    val endX = endLm.x() * width
-                    val endY = endLm.y() * height
+                    val startX = startLm.x() * rotatedWidth * scaleFactor
+                    val startY = startLm.y() * rotatedHeight * scaleFactor
+                    val endX = endLm.x() * rotatedWidth * scaleFactor
+                    val endY = endLm.y() * rotatedHeight * scaleFactor
 
                     val paintToUse = if (startIdx == 23 && endIdx == 24) waistLinePaint else skeletonPaint
                     canvas.drawLine(startX, startY, endX, endY, paintToUse)
                 }
             }
 
-            // Dibujar puntos clave (Landmarks)
-            for (lm in poseLandmarks) {
-                val x = lm.x() * width
-                val y = lm.y() * height
-                canvas.drawCircle(x, y, 9f, jointPaint)
+            // Dibujar puntos clave (Landmarks) para cabeza, hombros, codos, manos, cadera y piernas
+            for ((idx, lm) in poseLandmarks.withIndex()) {
+                val x = lm.x() * rotatedWidth * scaleFactor
+                val y = lm.y() * rotatedHeight * scaleFactor
+
+                val paint = when (idx) {
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 -> headJointPaint // Cabeza / Rostro (Cian Neón)
+                    11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 -> armJointPaint // Hombros, Codos, Muñecas y Manos (Amarillo/Verde)
+                    else -> jointPaint // Caderas, Rodillas, Tobillos (Magenta Neón)
+                }
+                val radius = if (idx in 15..22) 13f else 10f // Manos y dedos resaltados
+
+                canvas.drawCircle(x, y, radius, paint)
             }
         }
     }
@@ -263,26 +289,40 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         val kneeY = top + heightPx * 0.70f
         val ankleY = top + heightPx * 0.92f
 
-        canvas.drawCircle(centerX, headY, 12f, skeletonPaint)
+        canvas.drawCircle(centerX, headY, 12f, headJointPaint)
 
         canvas.drawLine(centerX, headY + 12f, centerX, neckY, skeletonPaint)
         canvas.drawLine(centerX, neckY, centerX, waistY, skeletonPaint)
 
         canvas.drawLine(shoulderLeftX, neckY, shoulderRightX, neckY, skeletonPaint)
-        canvas.drawCircle(shoulderLeftX, neckY, 8f, jointPaint)
-        canvas.drawCircle(shoulderRightX, neckY, 8f, jointPaint)
+        canvas.drawCircle(shoulderLeftX, neckY, 10f, armJointPaint)
+        canvas.drawCircle(shoulderRightX, neckY, 10f, armJointPaint)
 
-        canvas.drawLine(shoulderLeftX, neckY, left + widthPx * 0.15f, top + heightPx * 0.45f, skeletonPaint)
-        canvas.drawLine(shoulderRightX, neckY, left + widthPx * 0.85f, top + heightPx * 0.45f, skeletonPaint)
+        // Codos y Manos
+        val elbowLeftX = left + widthPx * 0.18f
+        val elbowRightX = left + widthPx * 0.82f
+        val handLeftX = left + widthPx * 0.12f
+        val handRightX = left + widthPx * 0.88f
+        val armY = top + heightPx * 0.42f
+
+        canvas.drawLine(shoulderLeftX, neckY, elbowLeftX, armY, skeletonPaint)
+        canvas.drawLine(shoulderRightX, neckY, elbowRightX, armY, skeletonPaint)
+        canvas.drawCircle(elbowLeftX, armY, 10f, armJointPaint)
+        canvas.drawCircle(elbowRightX, armY, 10f, armJointPaint)
+
+        canvas.drawLine(elbowLeftX, armY, handLeftX, armY + 20f, skeletonPaint)
+        canvas.drawLine(elbowRightX, armY, handRightX, armY + 20f, skeletonPaint)
+        canvas.drawCircle(handLeftX, armY + 20f, 12f, armJointPaint)
+        canvas.drawCircle(handRightX, armY + 20f, 12f, armJointPaint)
 
         canvas.drawLine(left, waistY, left + widthPx, waistY, waistLinePaint)
-        canvas.drawCircle(hipLeftX, waistY, 8f, jointPaint)
-        canvas.drawCircle(hipRightX, waistY, 8f, jointPaint)
+        canvas.drawCircle(hipLeftX, waistY, 10f, jointPaint)
+        canvas.drawCircle(hipRightX, waistY, 10f, jointPaint)
 
         canvas.drawLine(hipLeftX, waistY, left + widthPx * 0.35f, kneeY, skeletonPaint)
         canvas.drawLine(hipRightX, waistY, left + widthPx * 0.65f, kneeY, skeletonPaint)
-        canvas.drawCircle(left + widthPx * 0.35f, kneeY, 8f, jointPaint)
-        canvas.drawCircle(left + widthPx * 0.65f, kneeY, 8f, jointPaint)
+        canvas.drawCircle(left + widthPx * 0.35f, kneeY, 10f, jointPaint)
+        canvas.drawCircle(left + widthPx * 0.65f, kneeY, 10f, jointPaint)
 
         canvas.drawLine(left + widthPx * 0.35f, kneeY, left + widthPx * 0.35f, ankleY, skeletonPaint)
         canvas.drawLine(left + widthPx * 0.65f, kneeY, left + widthPx * 0.65f, ankleY, skeletonPaint)
@@ -338,7 +378,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     fun setResults(
         detectionResults: List<ObjectDetection>,
         imageHeight: Int,
-        imageWidth: Int
+        imageWidth: Int,
+        imageRotation: Int = 90
     ) {
         val personOnlyResults = detectionResults.filter {
             PersonDistanceEstimator.isPerson(it.category.label)
@@ -348,9 +389,17 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         currentImageHeight = imageHeight
         currentImageWidth = imageWidth
 
-        personDetections = personOnlyResults
-            .map { PersonDistanceEstimator.processDetection(it, imageHeight) }
+        if (imageRotation == 90 || imageRotation == 270) {
+            rotatedWidth = imageHeight
+            rotatedHeight = imageWidth
+        } else {
+            rotatedWidth = imageWidth
+            rotatedHeight = imageHeight
+        }
 
-        scaleFactor = max(width * 1f / imageWidth, height * 1f / imageHeight)
+        personDetections = personOnlyResults
+            .map { PersonDistanceEstimator.processDetection(it, rotatedHeight) }
+
+        scaleFactor = max(width * 1f / rotatedWidth, height * 1f / rotatedHeight)
     }
 }
