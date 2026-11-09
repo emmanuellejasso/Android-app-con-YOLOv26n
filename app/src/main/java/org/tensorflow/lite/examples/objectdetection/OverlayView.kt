@@ -124,8 +124,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             val confidencePct = (personDet.originalDetection.category.confidence * 100).toInt()
             val line1Text = "👤 Persona ($confidencePct%)"
 
-            // Información de línea 2 (Distancia estimada)
-            val line2Text = String.format(Locale.US, "📏 Distancia: %.2f m (Talla ~1.65m)", personDet.estimatedDistanceMeters)
+            // Información de línea 2 (Distancia estimada resumida)
+            val line2Text = String.format(Locale.US, "D: %.2f m", personDet.estimatedDistanceMeters)
 
             textPaint.getTextBounds(line1Text, 0, line1Text.length, bounds)
             subTextPaint.getTextBounds(line2Text, 0, line2Text.length, subBounds)
