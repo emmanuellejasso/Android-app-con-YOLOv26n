@@ -1,36 +1,33 @@
-# Android App con YOLO26 🚀
+# Detección de Distancia de Peatones con YOLO26 🚀
 
-**Android App con YOLO26** es una aplicación móvil de visión por computadora para Android que realiza **detección de objetos en tiempo real** utilizando el flujo de cámara en vivo y modelos de inteligencia artificial de última generación como **Ultralytics YOLOv26n**, **YOLOv11** y **TensorFlow Lite**.
+**Detección de Distancia de Peatones con YOLO26** es una aplicación móvil de visión por computadora para Android desarrollada para realizar **detección de personas y estimación de distancia en tiempo real** utilizando la cámara en vivo y modelos de inteligencia artificial como **Ultralytics YOLOv26n** y **TensorFlow Lite**.
 
 ---
 
 ## 👨‍💻 Creador y Desarrollador
 * **Autor:** M.C. Emmanuelle Jasso
-* **Proyecto:** Visión por Computadora & Detección de Objetos en Android
+* **Proyecto:** Visión por Computadora & Detección de Distancia de Peatones en Android
 
 ---
 
 ## ✨ Características Principales
 
-* ⚡ **Detección en Tiempo Real:** Procesamiento fluido de fotogramas de cámara usando **CameraX** y **TensorFlow Lite**.
-* 🧠 **Soporte Multimodelo:**
-  * **Ultralytics YOLOv26n** (Alta precisión).
-  * **Ultralytics YOLOv11n**.
-  * **MobileNet SSD V1** (Máxima velocidad).
-  * **EfficientDet Lite0, Lite1 y Lite2**.
-* 🏷️ **Filtrado por Campos Semánticos:** Filtra objetos detectados en pantalla según su categoría (Personas, Vehículos, Animales, Comida, etc.).
+* 👤 **Detección Exclusiva de Peatones:** Identifica en tiempo real a personas en el flujo de la cámara.
+* 📏 **Estimación Óptica de Distancia:** Calcula la distancia estimada en metros ($D = \frac{f_y \cdot H_{real}}{h_{bbox}}$) basándose en la estatura promedio de 1.65 m y la altura en píxeles del cuadro delimitador.
+* ⚡ **Modo Acelerado de Inferencia (Switch):**
+  * **YOLOv26n (Predeterminado):** Máxima precisión de detección de personas (~45 ms).
+  * **MobileNet SSD V1 (Modo Alta Velocidad):** Máxima velocidad de inferencia (~11 ms).
 * ⚙️ **Panel de Control Dinámico:** Umbral de confianza, resultados máximos, hilos de ejecución y aceleración por hardware (CPU/GPU/NNAPI).
-* 🎨 **Diseño Moderno:** Interfaz nativa en español con estética *Dark Glassmorphism*.
+* 🎨 **Diseño Limpio y Moderno:** Interfaz estilizada *Dark Glassmorphism* sin distractores visuales.
 
 ---
 
-## 📊 Comparativa y Descubrimientos de Modelos
+## 📊 Comparativa de Modelos
 
-| Modelo | Tiempo de Inferencia | Precisión | Observaciones |
+| Modelo | Tiempo de Inferencia | Precisión | Uso Recomendado |
 | :--- | :--- | :--- | :--- |
-| **MobileNet SSD V1** | ⚡ Es el más rápido para inferir | ⚠️ Falla algunas veces en detectar personas | Ideal para máximo rendimiento donde la velocidad sea prioritaria. |
-| **YOLOv26n** | 🐢 ~45 ms en promedio | 🎯 Muy preciso | Alta precisión de detección, con un tiempo de inferencia casi 4 veces mayor que MobileNet. |
-| **YOLOv11n** | ⚡ Rápido y balanceado | 🎯 Alta | Excelente balance entre rendimiento y precisión en tiempo real. |
+| **YOLOv26n** (Predeterminado) | ~45 ms promedio | 🎯 **Muy alta** | Análisis de precisión para detección constante de personas. |
+| **MobileNet SSD V1** (Modo Alta Velocidad) | ⚡ ~11 ms promedio | 🚀 **Ultra rápido** | Mayor fluidez de FPS cuando la velocidad es la prioridad. |
 
 ---
 
