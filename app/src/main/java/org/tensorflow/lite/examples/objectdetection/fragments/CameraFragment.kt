@@ -38,6 +38,7 @@ import androidx.navigation.Navigation
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import org.tensorflow.lite.examples.objectdetection.ObjectDetectorHelper
+import org.tensorflow.lite.examples.objectdetection.PoseLandmarkerHelper
 import org.tensorflow.lite.examples.objectdetection.R
 import org.tensorflow.lite.examples.objectdetection.databinding.FragmentCameraBinding
 import org.tensorflow.lite.examples.objectdetection.detectors.ObjectDetection
@@ -50,6 +51,7 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
         get() = _fragmentCameraBinding!!
 
     private lateinit var objectDetectorHelper: ObjectDetectorHelper
+    private lateinit var poseLandmarkerHelper: PoseLandmarkerHelper
     private lateinit var bitmapBuffer: Bitmap
     private var preview: Preview? = null
     private var imageAnalyzer: ImageAnalysis? = null
@@ -68,6 +70,9 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
     }
 
     override fun onDestroyView() {
+        if (::poseLandmarkerHelper.isInitialized) {
+            poseLandmarkerHelper.clear()
+        }
         _fragmentCameraBinding = null
         super.onDestroyView()
         cameraExecutor.shutdown()
@@ -89,6 +94,10 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
         objectDetectorHelper = ObjectDetectorHelper(
             context = requireContext(),
             objectDetectorListener = this
+        )
+
+        poseLandmarkerHelper = PoseLandmarkerHelper(
+            context = requireContext()
         )
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -259,6 +268,13 @@ class CameraFragment : Fragment(), ObjectDetectorHelper.DetectorListener {
     private fun detectObjects(image: ImageProxy) {
         image.use {
             bitmapBuffer.copyPixelsFromBuffer(image.planes[0].buffer)
+        }
+
+        if (fragmentCameraBinding.overlay.isPoseEstimationEnabled && ::poseLandmarkerHelper.isInitialized) {
+            val poseResult = poseLandmarkerHelper.detect(bitmapBuffer)
+            fragmentCameraBinding.overlay.poseLandmarkerResult = poseResult
+        } else {
+            fragmentCameraBinding.overlay.poseLandmarkerResult = null
         }
 
         val imageRotation = image.imageInfo.rotationDegrees

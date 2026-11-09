@@ -123,13 +123,13 @@ dependencies {
     androidTestImplementation "androidx.test:runner:1.6.2"
     androidTestImplementation "androidx.test.espresso:espresso-core:3.6.1"
 
-    // TensorFlow Lite
+    // TensorFlow Lite & MediaPipe
     implementation 'org.tensorflow:tensorflow-lite:2.12.0'
     implementation 'org.tensorflow:tensorflow-lite-task-vision:0.4.0'
     implementation 'org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.0'
     implementation 'org.tensorflow:tensorflow-lite-gpu:2.12.0'
 
+    implementation 'com.google.mediapipe:tasks-vision:0.10.14'
+
     implementation 'org.yaml:snakeyaml:1.29'
-
-
 }

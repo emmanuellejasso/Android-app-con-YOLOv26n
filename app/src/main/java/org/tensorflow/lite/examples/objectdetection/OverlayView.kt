@@ -26,6 +26,7 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
+import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import org.tensorflow.lite.examples.objectdetection.detectors.ObjectDetection
 import java.util.LinkedList
 import java.util.Locale
@@ -37,6 +38,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var personDetections: List<PersonDetection> = LinkedList<PersonDetection>()
 
     var isPoseEstimationEnabled: Boolean = false
+    var poseLandmarkerResult: PoseLandmarkerResult? = null
 
     private var boxPaint = Paint()
     private var boxFillPaint = Paint()
@@ -44,6 +46,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var textPaint = Paint()
     private var subTextPaint = Paint()
     private var skeletonPaint = Paint()
+    private var jointPaint = Paint()
     private var waistLinePaint = Paint()
 
     private var scaleFactor: Float = 1f
@@ -52,6 +55,18 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
     private var currentImageHeight: Int = 1
     private var currentImageWidth: Int = 1
+
+    companion object {
+        // Conexiones de los 33 puntos clave (landmarks) de MediaPipe Pose
+        private val POSE_CONNECTIONS = listOf(
+            Pair(0, 1), Pair(1, 2), Pair(2, 3), Pair(0, 4), Pair(4, 5), Pair(5, 6), Pair(9, 10), // Rostro
+            Pair(11, 12), // Hombros
+            Pair(11, 13), Pair(13, 15), Pair(12, 14), Pair(14, 16), // Brazos
+            Pair(11, 23), Pair(12, 24), // Torso
+            Pair(23, 24), // Cintura / Caderas
+            Pair(23, 25), Pair(25, 27), Pair(24, 26), Pair(26, 28) // Piernas
+        )
+    }
 
     init {
         initPaints()
@@ -64,7 +79,9 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         boxPaint.reset()
         boxFillPaint.reset()
         skeletonPaint.reset()
+        jointPaint.reset()
         waistLinePaint.reset()
+        poseLandmarkerResult = null
         invalidate()
         initPaints()
     }
@@ -92,17 +109,22 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         boxFillPaint.style = Paint.Style.FILL
         boxFillPaint.isAntiAlias = true
 
-        // Esqueleto para estimación de pose
+        // Esqueleto MediaPipe Pose (Líneas)
         skeletonPaint.color = Color.parseColor("#00FF66") // Verde neón
-        skeletonPaint.strokeWidth = 5f
+        skeletonPaint.strokeWidth = 6f
         skeletonPaint.style = Paint.Style.STROKE
         skeletonPaint.isAntiAlias = true
 
-        // Línea de cintura (38% desde la cabeza)
+        // Articulaciones / Puntos Clave (Landmarks)
+        jointPaint.color = Color.parseColor("#FF0055") // Magenta neón
+        jointPaint.style = Paint.Style.FILL
+        jointPaint.isAntiAlias = true
+
+        // Línea de Cintura (Landmarks 23-24)
         waistLinePaint.color = Color.parseColor("#FFD700") // Dorado
-        waistLinePaint.strokeWidth = 4f
+        waistLinePaint.strokeWidth = 5f
         waistLinePaint.style = Paint.Style.STROKE
-        waistLinePaint.pathEffect = DashPathEffect(floatArrayOf(10f, 10f), 0f)
+        waistLinePaint.pathEffect = DashPathEffect(floatArrayOf(12f, 12f), 0f)
         waistLinePaint.isAntiAlias = true
     }
 
@@ -133,20 +155,20 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             val widthPx = right - left
             val heightPx = bottom - top
 
-            // Dibujar caja delimitadora con bordes redondeados
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxFillPaint)
             canvas.drawRoundRect(drawableRect, 16f, 16f, boxPaint)
 
-            // Si la estimación de pose está habilitada, dibujar el esqueleto
+            // Si la estimación de pose está habilitada, renderizar MediaPipe Pose Landmarks
             if (isPoseEstimationEnabled) {
-                drawPoseSkeleton(canvas, left, top, widthPx, heightPx)
+                if (poseLandmarkerResult != null && poseLandmarkerResult!!.landmarks().isNotEmpty()) {
+                    drawMediaPipeLandmarks(canvas)
+                } else {
+                    drawPoseSkeletonFallback(canvas, left, top, widthPx, heightPx)
+                }
             }
 
-            // Información de línea 1 (Persona + Confianza)
             val confidencePct = (personDet.originalDetection.category.confidence * 100).toInt()
             val line1Text = "👤 Persona ($confidencePct%)"
-
-            // Información de línea 2 (Distancia estimada basada en el segmento cintura-cabeza 38%)
             val line2Text = String.format(Locale.US, "D: %.2f m", personDet.estimatedDistanceMeters)
 
             textPaint.getTextBounds(line1Text, 0, line1Text.length, bounds)
@@ -188,7 +210,39 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         }
     }
 
-    private fun drawPoseSkeleton(
+    private fun drawMediaPipeLandmarks(canvas: Canvas) {
+        val landmarksList = poseLandmarkerResult?.landmarks() ?: return
+
+        for (poseLandmarks in landmarksList) {
+            // Dibujar conexiones entre puntos clave
+            for (connection in POSE_CONNECTIONS) {
+                val startIdx = connection.first
+                val endIdx = connection.second
+
+                if (startIdx < poseLandmarks.size && endIdx < poseLandmarks.size) {
+                    val startLm = poseLandmarks[startIdx]
+                    val endLm = poseLandmarks[endIdx]
+
+                    val startX = startLm.x() * width
+                    val startY = startLm.y() * height
+                    val endX = endLm.x() * width
+                    val endY = endLm.y() * height
+
+                    val paintToUse = if (startIdx == 23 && endIdx == 24) waistLinePaint else skeletonPaint
+                    canvas.drawLine(startX, startY, endX, endY, paintToUse)
+                }
+            }
+
+            // Dibujar puntos clave (Landmarks)
+            for (lm in poseLandmarks) {
+                val x = lm.x() * width
+                val y = lm.y() * height
+                canvas.drawCircle(x, y, 9f, jointPaint)
+            }
+        }
+    }
+
+    private fun drawPoseSkeletonFallback(
         canvas: Canvas,
         left: Float,
         top: Float,
@@ -197,45 +251,38 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     ) {
         val centerX = left + widthPx / 2f
 
-        // Puntos de referencia anatómicos
         val headY = top + heightPx * 0.08f
         val neckY = top + heightPx * 0.18f
         val shoulderLeftX = left + widthPx * 0.25f
         val shoulderRightX = left + widthPx * 0.75f
 
-        val waistY = top + heightPx * 0.38f // Línea de Cintura / Cadera (38% del alto total)
+        val waistY = top + heightPx * 0.38f // Línea de Cintura (38%)
         val hipLeftX = left + widthPx * 0.35f
         val hipRightX = left + widthPx * 0.65f
 
         val kneeY = top + heightPx * 0.70f
         val ankleY = top + heightPx * 0.92f
 
-        // Dibujar nodo Cabeza
         canvas.drawCircle(centerX, headY, 12f, skeletonPaint)
 
-        // Columna vertebral (Cabeza -> Cuello -> Cintura)
         canvas.drawLine(centerX, headY + 12f, centerX, neckY, skeletonPaint)
         canvas.drawLine(centerX, neckY, centerX, waistY, skeletonPaint)
 
-        // Hombros
         canvas.drawLine(shoulderLeftX, neckY, shoulderRightX, neckY, skeletonPaint)
-        canvas.drawCircle(shoulderLeftX, neckY, 8f, skeletonPaint)
-        canvas.drawCircle(shoulderRightX, neckY, 8f, skeletonPaint)
+        canvas.drawCircle(shoulderLeftX, neckY, 8f, jointPaint)
+        canvas.drawCircle(shoulderRightX, neckY, 8f, jointPaint)
 
-        // Brazos
         canvas.drawLine(shoulderLeftX, neckY, left + widthPx * 0.15f, top + heightPx * 0.45f, skeletonPaint)
         canvas.drawLine(shoulderRightX, neckY, left + widthPx * 0.85f, top + heightPx * 0.45f, skeletonPaint)
 
-        // Línea de Cintura (Segmento de medición del 38%)
         canvas.drawLine(left, waistY, left + widthPx, waistY, waistLinePaint)
-        canvas.drawCircle(hipLeftX, waistY, 8f, skeletonPaint)
-        canvas.drawCircle(hipRightX, waistY, 8f, skeletonPaint)
+        canvas.drawCircle(hipLeftX, waistY, 8f, jointPaint)
+        canvas.drawCircle(hipRightX, waistY, 8f, jointPaint)
 
-        // Piernas
         canvas.drawLine(hipLeftX, waistY, left + widthPx * 0.35f, kneeY, skeletonPaint)
         canvas.drawLine(hipRightX, waistY, left + widthPx * 0.65f, kneeY, skeletonPaint)
-        canvas.drawCircle(left + widthPx * 0.35f, kneeY, 8f, skeletonPaint)
-        canvas.drawCircle(left + widthPx * 0.65f, kneeY, 8f, skeletonPaint)
+        canvas.drawCircle(left + widthPx * 0.35f, kneeY, 8f, jointPaint)
+        canvas.drawCircle(left + widthPx * 0.65f, kneeY, 8f, jointPaint)
 
         canvas.drawLine(left + widthPx * 0.35f, kneeY, left + widthPx * 0.35f, ankleY, skeletonPaint)
         canvas.drawLine(left + widthPx * 0.65f, kneeY, left + widthPx * 0.65f, ankleY, skeletonPaint)
@@ -293,7 +340,6 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         imageHeight: Int,
         imageWidth: Int
     ) {
-        // Filtrar explícitamente para incluir ÚNICAMENTE personas
         val personOnlyResults = detectionResults.filter {
             PersonDistanceEstimator.isPerson(it.category.label)
         }
